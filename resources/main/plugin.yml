@@ -1,0 +1,16 @@
+name: LastSeenDiscord
+version: 1.0.0
+main: com.example.lastseendiscord.LastSeenDiscordPlugin
+api-version: '1.21'
+author: OpenAI
+website: https://openai.com
+commands:
+  lastseendiscord:
+    description: Reloads the LastSeenDiscord config and forces a Discord sync.
+    usage: /<command> reload|sync
+    permission: lastseendiscord.admin
+    aliases: [lsd]
+permissions:
+  lastseendiscord.admin:
+    description: Allows reloading and syncing LastSeenDiscord.
+    default: op
