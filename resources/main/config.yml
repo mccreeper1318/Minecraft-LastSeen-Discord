@@ -1,7 +1,6 @@
 discord:
-  bot-token: "PUT_BOT_TOKEN_HERE"
-  channel-id: "PUT_TEXT_CHANNEL_ID_HERE"
-  # Leave blank on first run. The plugin will create a message, save the ID,
+  webhook-url: "PUT_DISCORD_WEBHOOK_URL_HERE"
+  # Leave blank on first run. The plugin will create a webhook message, save the ID,
   # and edit that same message on future updates.
   message-id: ""
   # Optional heading shown above the player list.
