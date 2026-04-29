@@ -180,16 +180,15 @@ public final class DiscordSyncService {
         StringBuilder current = new StringBuilder();
 
         for (String line : lines) {
-            String candidate = current.isEmpty() ? line : current + "\n" + line;
-            if (candidate.length() <= DISCORD_CHUNK_MAX) {
-                current.setLength(0);
-                current.append(candidate);
+            if (line.length() <= DISCORD_CHUNK_MAX) {
+                appendLineToChunks(chunks, current, line);
                 continue;
             }
 
-            if (!current.isEmpty()) {
-                chunks.add(current.toString());
-                current.setLength(0);
+            plugin.getLogger().warning("Splitting overlong Discord line (" + line.length() + " chars, max " + DISCORD_CHUNK_MAX + ").");
+            for (int start = 0; start < line.length(); start += DISCORD_CHUNK_MAX) {
+                int end = Math.min(start + DISCORD_CHUNK_MAX, line.length());
+                appendLineToChunks(chunks, current, line.substring(start, end));
             }
 
             if (line.length() > DISCORD_CHUNK_MAX) {
@@ -208,6 +207,22 @@ public final class DiscordSyncService {
         }
 
         return chunks;
+    }
+
+        private void appendLineToChunks(List<String> chunks, StringBuilder current, String line) {
+        String candidate = current.isEmpty() ? line : current + "\n" + line;
+        if (candidate.length() <= DISCORD_CHUNK_MAX) {
+            current.setLength(0);
+            current.append(candidate);
+            return;
+        }
+
+        if (!current.isEmpty()) {
+            chunks.add(current.toString());
+            current.setLength(0);
+        }
+
+        current.append(line);
     }
 
     private String createMessage(String webhookUrl, String content) throws IOException, InterruptedException {
