@@ -309,7 +309,7 @@ public final class DiscordSyncService {
                 .replace("`", "\\`")
                 .replace("|", "\\|")
                 .replace(">", "\\>")
-                .replace("@", "@");
+                .replace("@", "@\u200B");
     }
 
     private record PlayerStatus(String name, long lastLogin, boolean active) {
