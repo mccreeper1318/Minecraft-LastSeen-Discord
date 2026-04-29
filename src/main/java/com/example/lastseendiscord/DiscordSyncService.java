@@ -18,10 +18,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 public final class DiscordSyncService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd")
             .withZone(ZoneId.systemDefault());
+    private static final int DISCORD_CHUNK_MAX = 1900;
 
     private final LastSeenDiscordPlugin plugin;
     private final HttpClient httpClient;
@@ -68,30 +70,54 @@ public final class DiscordSyncService {
     private void syncOnce(String reason) throws IOException, InterruptedException {
         FileConfiguration config = plugin.config();
         String webhookUrl = config.getString("discord.webhook-url", "").trim();
-        String messageId = config.getString("discord.message-id", "").trim();
+        List<String> messageIds = new ArrayList<>(config.getStringList("discord.message-ids"));
+        messageIds = messageIds.stream().map(String::trim).filter(id -> !id.isBlank()).collect(Collectors.toCollection(ArrayList::new));
+
+        if (messageIds.isEmpty()) {
+            String legacyMessageId = config.getString("discord.message-id", "").trim();
+            if (!legacyMessageId.isEmpty()) {
+                messageIds.add(legacyMessageId);
+                plugin.getConfig().set("discord.message-ids", messageIds);
+                plugin.saveConfig();
+                plugin.getLogger().info("Migrated legacy discord.message-id to discord.message-ids");
+            }
+        }
 
         if (webhookUrl.isEmpty() || webhookUrl.equals("PUT_DISCORD_WEBHOOK_URL_HERE")) {
             plugin.getLogger().warning("Skipping Discord sync: discord.webhook-url is not configured.");
             return;
         }
 
-        String content = buildDiscordMessage(config);
+        List<String> chunks = buildDiscordMessages(config);
 
-        if (messageId.isEmpty()) {
+        List<String> finalMessageIds = new ArrayList<>(messageIds);
+        for (int i = 0; i < chunks.size(); i++) {
+            String content = chunks.get(i);
+            if (i < finalMessageIds.size()) {
+                editMessage(webhookUrl, finalMessageIds.get(i), content);
+                continue;
+            }
+
             String createdMessageId = createMessage(webhookUrl, content);
             if (createdMessageId != null && !createdMessageId.isBlank()) {
-                plugin.getConfig().set("discord.message-id", createdMessageId);
-                plugin.saveConfig();
-                plugin.getLogger().info("Created Discord webhook message and saved message-id=" + createdMessageId + " (reason: " + reason + ")");
+                finalMessageIds.add(createdMessageId);
             }
-            return;
         }
 
-        editMessage(webhookUrl, messageId, content);
-        plugin.getLogger().info("Updated Discord webhook message (reason: " + reason + ")");
+        if (finalMessageIds.size() > chunks.size()) {
+            List<String> staleMessageIds = new ArrayList<>(finalMessageIds.subList(chunks.size(), finalMessageIds.size()));
+            for (String staleMessageId : staleMessageIds) {
+                deleteMessage(webhookUrl, staleMessageId);
+            }
+            finalMessageIds = new ArrayList<>(finalMessageIds.subList(0, chunks.size()));
+        }
+
+        plugin.getConfig().set("discord.message-ids", finalMessageIds);
+        plugin.saveConfig();
+        plugin.getLogger().info("Updated Discord webhook messages (" + chunks.size() + " chunk(s), reason: " + reason + ")");
     }
 
-    private String buildDiscordMessage(FileConfiguration config) {
+    private List<String> buildDiscordMessages(FileConfiguration config) {
         int inactiveAfterDays = Math.max(1, config.getInt("activity.inactive-after-days", 30));
         boolean includeLastLoginDate = config.getBoolean("discord.include-last-login-date", false);
         String header = Objects.requireNonNullElse(config.getString("discord.header"), "").trim();
@@ -117,47 +143,71 @@ public final class DiscordSyncService {
 
         statuses.sort(Comparator.comparing(PlayerStatus::name, String.CASE_INSENSITIVE_ORDER));
 
-        StringBuilder sb = new StringBuilder();
+        List<String> lines = new ArrayList<>();
         if (!header.isEmpty()) {
-            sb.append(header).append("\n\n");
+            lines.add(header);
+            lines.add("");
         }
 
-        sb.append("Active threshold: past ")
-                .append(inactiveAfterDays)
-                .append(inactiveAfterDays == 1 ? " day" : " days")
-                .append("\n\n");
+        lines.add("Active threshold: past " + inactiveAfterDays + (inactiveAfterDays == 1 ? " day" : " days"));
+        lines.add("");
 
         if (statuses.isEmpty()) {
-            sb.append("No players with recorded login history were found.");
-            return truncateDiscordContent(sb.toString());
-        }
-
-        for (PlayerStatus status : statuses) {
-            sb.append("- ")
-                    .append(escapeDiscord(status.name()))
-                    .append(" (")
-                    .append(status.active() ? "active" : "inactive")
-                    .append(")");
-
-            if (includeLastLoginDate && status.lastLogin() > 0L) {
-                sb.append(" — ").append(DATE_FORMATTER.format(Instant.ofEpochMilli(status.lastLogin())));
+            lines.add("No players with recorded login history were found.");
+        } else {
+            for (PlayerStatus status : statuses) {
+                StringBuilder playerLine = new StringBuilder();
+                playerLine.append("- ")
+                        .append(escapeDiscord(status.name()))
+                        .append(" (")
+                        .append(status.active() ? "active" : "inactive")
+                        .append(")");
+                if (includeLastLoginDate && status.lastLogin() > 0L) {
+                    playerLine.append(" — ").append(DATE_FORMATTER.format(Instant.ofEpochMilli(status.lastLogin())));
+                }
+                lines.add(playerLine.toString());
             }
-            sb.append("\n");
         }
 
-        sb.append("\nUpdated: <t:")
-                .append(Instant.now().getEpochSecond())
-                .append(":R>");
+        lines.add("");
+        lines.add("Updated: <t:" + Instant.now().getEpochSecond() + ":R>");
 
-        return truncateDiscordContent(sb.toString());
+        return splitIntoChunks(lines);
     }
 
-    private String truncateDiscordContent(String content) {
-        int max = 1900;
-        if (content.length() <= max) {
-            return content;
+    private List<String> splitIntoChunks(List<String> lines) {
+        List<String> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        for (String line : lines) {
+            String candidate = current.isEmpty() ? line : current + "\n" + line;
+            if (candidate.length() <= DISCORD_CHUNK_MAX) {
+                current.setLength(0);
+                current.append(candidate);
+                continue;
+            }
+
+            if (!current.isEmpty()) {
+                chunks.add(current.toString());
+                current.setLength(0);
+            }
+
+            if (line.length() > DISCORD_CHUNK_MAX) {
+                throw new IllegalStateException("Single line exceeds Discord chunk limit: " + line.length());
+            }
+
+            current.append(line);
         }
-        return content.substring(0, max - 24) + "\n... list truncated due to length";
+
+        if (!current.isEmpty()) {
+            chunks.add(current.toString());
+        }
+
+        if (chunks.isEmpty()) {
+            chunks.add("");
+        }
+
+        return chunks;
     }
 
     private String createMessage(String webhookUrl, String content) throws IOException, InterruptedException {
@@ -184,6 +234,17 @@ public final class DiscordSyncService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         ensureSuccess(response, "edit Discord webhook message");
+    }
+
+    private void deleteMessage(String webhookUrl, String messageId) throws IOException, InterruptedException {
+        String deleteUrl = webhookUrl + "/messages/" + messageId;
+
+        HttpRequest request = baseRequest(deleteUrl)
+                .DELETE()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        ensureSuccess(response, "delete Discord webhook message");
     }
 
     private HttpRequest.Builder baseRequest(String url) {
@@ -225,11 +286,15 @@ public final class DiscordSyncService {
     }
 
     private String escapeDiscord(String value) {
-        return value.replace("*", "\\*")
+        return value
+                .replace("\\", "\\\\")
+                .replace("*", "\\*")
                 .replace("_", "\\_")
                 .replace("~", "\\~")
                 .replace("`", "\\`")
-                .replace("|", "\\|");
+                .replace("|", "\\|")
+                .replace(">", "\\>")
+                .replace("@", "@");
     }
 
     private record PlayerStatus(String name, long lastLogin, boolean active) {
