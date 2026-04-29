@@ -254,6 +254,10 @@ public final class DiscordSyncService {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (response.statusCode() == 404) {
+            plugin.getLogger().info("Discord message " + messageId + " was already deleted; pruning stale id from config.");
+            return;
+        }
         ensureSuccess(response, "delete Discord webhook message");
     }
 
