@@ -191,11 +191,6 @@ public final class DiscordSyncService {
                 appendLineToChunks(chunks, current, line.substring(start, end));
             }
 
-            if (line.length() > DISCORD_CHUNK_MAX) {
-                throw new IllegalStateException("Single line exceeds Discord chunk limit: " + line.length());
-            }
-
-            current.append(line);
         }
 
         if (!current.isEmpty()) {
@@ -209,7 +204,7 @@ public final class DiscordSyncService {
         return chunks;
     }
 
-        private void appendLineToChunks(List<String> chunks, StringBuilder current, String line) {
+    private void appendLineToChunks(List<String> chunks, StringBuilder current, String line) {
         String candidate = current.isEmpty() ? line : current + "\n" + line;
         if (candidate.length() <= DISCORD_CHUNK_MAX) {
             current.setLength(0);
