@@ -1,7 +1,7 @@
 name: LastSeenDiscord
 version: ${version}
 main: com.example.lastseendiscord.LastSeenDiscordPlugin
-api-version: '1.21'
+api-version: '26.1.2'
 author: OpenAI
 website: https://openai.com
 commands:
