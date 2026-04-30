@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -88,7 +89,8 @@ public final class DiscordSyncService {
             return;
         }
 
-        List<String> chunks = buildDiscordMessages(config);
+        List<OffilePlayerSnapshot> offlinePlayers = collectOfflinePlayerSnapshots();
+        List<String> chunks = buildDiscordMessages(config, offlinePlayers);
 
         List<String> finalMessageIds = new ArrayList<>(messageIds);
         for (int i = 0; i < chunks.size(); i++) {
@@ -117,7 +119,25 @@ public final class DiscordSyncService {
         plugin.getLogger().info("Updated Discord webhook messages (" + chunks.size() + " chunk(s), reason: " + reason + ")");
     }
 
-    private List<String> buildDiscordMessages(FileConfiguration config) {
+    private List<OfflinePlayerSnapshot. collectOfflinePlayerSnapshots() throws InterruptedException, IOException {
+        try {
+            return Bukkit.getScheduler().callSyncMethod(plugin, () -> {
+                List<OfflinePlayerSnapshot> snapshots = new ArrayList <>();
+                for (OfflinePlayer offlinePlayer : Bukkit.getOfflinePlayers()) {
+                    snapshots.add(new OfflinePlayerSnapshot(
+                        offlinePlayer.getName(),
+                        offlinePlayer.getLastLogin(),
+                        offlinePlayer.hasPlayedBefore()
+                        ));
+                }
+                return List.copyOf(snapshots);
+            }).get();
+        } catch (ExecutionException ex) {
+            throw new IOException("Failed to collect offline player snapshots on pimary thread.", ex.getCause());
+        }
+    }
+
+    private List<String> buildDiscordMessages(FileConfiguration config, List<OfflinePlayerSnapshot> offlinePlayers) {
         int inactiveAfterDays = Math.max(1, config.getInt("activity.inactive-after-days", 30));
         boolean includeLastLoginDate = config.getBoolean("discord.include-last-login-date", false);
         String header = Objects.requireNonNullElse(config.getString("discord.header"), "").trim();
@@ -126,7 +146,7 @@ public final class DiscordSyncService {
         long activeThreshold = now - (inactiveAfterDays * 24L * 60L * 60L * 1000L);
 
         List<PlayerStatus> statuses = new ArrayList<>();
-        for (OfflinePlayer offlinePlayer : Bukkit.getOfflinePlayers()) {
+        for (OfflinePlayerSnapshot offlinePlayer : offlinePlayers) {
             if (!offlinePlayer.hasPlayedBefore()) {
                 continue;
             }
@@ -312,5 +332,8 @@ public final class DiscordSyncService {
     }
 
     private record PlayerStatus(String name, long lastLogin, boolean active) {
+    }
+
+    private record OfflinePlayerSnapshot(String name, long lastLogin, boolean hasPlayedBefore) {
     }
 }
