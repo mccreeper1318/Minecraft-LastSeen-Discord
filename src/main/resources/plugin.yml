@@ -1,9 +1,10 @@
 name: LastSeenDiscord
 version: ${version}
-main: com.example.lastseendiscord.LastSeenDiscordPlugin
-api-version: '1.21'
-author: OpenAI
-website: https://openai.com
+main: com.pinnaclesmp.lastseendiscord.LastSeenDiscordPlugin
+api-version: '26.2'
+author: Kevin
+website: https://pinnaclesmp.org
+description: Syncs server member activity status to Discord.
 commands:
   lastseendiscord:
     description: Reloads the LastSeenDiscord config and forces a Discord sync.

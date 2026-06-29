@@ -5,18 +5,21 @@ discord:
   # On future updates, IDs are patched in order, extra IDs are created when needed,
   # and stale IDs are deleted when fewer chunks are required.
   # Backward compatibility: if legacy `message-id` is present, it is migrated into
-  # this list on the first sync.
+  # this list on the first successful sync.
   message-ids: []
   # Legacy single-message setting retained for backward compatibility migration.
   # New installs should leave this blank and use `message-ids` above.
   message-id: ""
   # Optional heading shown above the player list.
   header: "**Server Activity Status**"
-  # If true, the plugin appends the last login date to each line.
-  include-last-login-date: false
+  # If true, the plugin appends the configured activity timestamp date to each line.
+  include-last-seen-date: false
 
 activity:
   inactive-after-days: 30
+  # LAST_SEEN is recommended because it treats online players as active now.
+  # Use LAST_LOGIN if you specifically want the login timestamp instead.
+  timestamp-source: "LAST_SEEN"
 
 updates:
   interval-minutes: 1440
