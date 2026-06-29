@@ -2,8 +2,8 @@ plugins {
     java
 }
 
-group = "com.example"
-version = "1.0.0"
+group = "com.pinnaclesmp"
+version = "1.1"
 
 repositories {
     mavenCentral()
@@ -11,12 +11,12 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
@@ -29,5 +29,5 @@ tasks.processResources {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(21)
+    options.release.set(25)
 }
