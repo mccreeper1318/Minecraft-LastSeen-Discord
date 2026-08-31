@@ -34,7 +34,7 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
                 .build();
         final HttpResponse<String> response;
         try {
-            response = send(request, "create a Discord webhook message");
+            response = send(request, "create a Discord webhook message", true);
         } catch (RetryableSyncException ex) {
             if (ex.deliveryMayBeAmbiguous()) {
                 throw new AmbiguousCreateException(ex);
@@ -58,7 +58,7 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         HttpRequest request = baseRequest(endpoint.messageUri(messageId))
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(jsonBody(content), StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> response = send(request, "edit a Discord webhook message");
+        HttpResponse<String> response = send(request, "edit a Discord webhook message", false);
         if (isUnknownMessageResponse(response.statusCode(), response.body())) {
             return DiscordMessageSynchronizer.EditResult.MISSING;
         }
@@ -69,13 +69,14 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
     @Override
     public void delete(WebhookEndpoint endpoint, String messageId) throws IOException, InterruptedException {
         HttpRequest request = baseRequest(endpoint.messageUri(messageId)).DELETE().build();
-        HttpResponse<String> response = send(request, "delete a Discord webhook message");
+        HttpResponse<String> response = send(request, "delete a Discord webhook message", false);
         if (response.statusCode() != 404) {
             ensureSuccess(response, "delete a Discord webhook message");
         }
     }
 
-    private HttpResponse<String> send(HttpRequest request, String action) throws IOException, InterruptedException {
+    private HttpResponse<String> send(HttpRequest request, String action, boolean serverFailureMayBeAmbiguous)
+            throws IOException, InterruptedException {
         final HttpResponse<String> response;
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -93,7 +94,8 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         }
         if (response.statusCode() >= 500) {
             throw new RetryableSyncException("Discord temporarily failed the webhook request (HTTP "
-                    + response.statusCode() + ").", RetryableSyncException.NO_SERVER_DELAY);
+                    + response.statusCode() + ").", RetryableSyncException.NO_SERVER_DELAY,
+                    serverFailureMayBeAmbiguous);
         }
         return response;
     }

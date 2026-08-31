@@ -52,4 +52,15 @@ class RetryPolicyTest {
                 "{\"code\":10008}"
         ));
     }
+
+    @Test
+    void createServerFailuresCanBeMarkedAsAmbiguous() {
+        RetryableSyncException exception = new RetryableSyncException(
+                "Discord temporarily failed a create request.",
+                RetryableSyncException.NO_SERVER_DELAY,
+                true
+        );
+
+        assertTrue(exception.deliveryMayBeAmbiguous());
+    }
 }

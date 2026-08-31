@@ -7,9 +7,13 @@ final class RetryableSyncException extends SyncException {
     private final boolean deliveryMayBeAmbiguous;
 
     RetryableSyncException(String safeMessage, long suggestedDelayMillis) {
+        this(safeMessage, suggestedDelayMillis, false);
+    }
+
+    RetryableSyncException(String safeMessage, long suggestedDelayMillis, boolean deliveryMayBeAmbiguous) {
         super(safeMessage);
         this.suggestedDelayMillis = suggestedDelayMillis;
-        this.deliveryMayBeAmbiguous = false;
+        this.deliveryMayBeAmbiguous = deliveryMayBeAmbiguous;
     }
 
     RetryableSyncException(String safeMessage, Throwable cause) {
