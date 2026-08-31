@@ -31,6 +31,7 @@ public final class DiscordSyncService {
 
     private volatile List<String> messageIds;
     private volatile boolean createOutcomeUnknown;
+    private final boolean runtimeStateUsable;
     private BukkitTask retryTask;
     private int retryAttempt;
 
@@ -38,9 +39,10 @@ public final class DiscordSyncService {
         this.plugin = plugin;
         Path statePath = plugin.getDataFolder().toPath().resolve("message-state.json");
         this.messageStateStore = new MessageStateStore(statePath);
-        MessageStateStore.State initialState = loadInitialMessageState(statePath);
-        this.messageIds = initialState.messageIds();
-        this.createOutcomeUnknown = initialState.createOutcomeUnknown();
+        InitialMessageState initialState = loadInitialMessageState(statePath);
+        this.messageIds = initialState.state().messageIds();
+        this.createOutcomeUnknown = initialState.state().createOutcomeUnknown();
+        this.runtimeStateUsable = initialState.usable();
 
         String userAgent = plugin.getDescription().getName() + "/" + plugin.getDescription().getVersion();
         DiscordWebhookClient webhookClient = new DiscordWebhookClient(userAgent);
@@ -90,6 +92,10 @@ public final class DiscordSyncService {
 
     public boolean recoverAmbiguousCreate() throws IOException {
         synchronized (lifecycleLock) {
+            if (!runtimeStateUsable) {
+                throw new SyncException("message-state.json could not be read. Repair or remove it after "
+                        + "reconciling the Discord messages, then restart the server.");
+            }
             if (!createOutcomeUnknown) {
                 return false;
             }
@@ -185,6 +191,10 @@ public final class DiscordSyncService {
     }
 
     private SyncSnapshot createSyncSnapshot() {
+        if (!runtimeStateUsable) {
+            return SyncSnapshot.unconfigured("Skipping Discord sync: message-state.json could not be read. "
+                    + "Repair or remove it after reconciling the Discord messages, then restart the server.");
+        }
         FileConfiguration config = plugin.config();
         String configuredUrl = config.getString("discord.webhook-url", "").trim();
         if (configuredUrl.isEmpty() || configuredUrl.equals("PUT_DISCORD_WEBHOOK_URL_HERE")) {
@@ -216,12 +226,15 @@ public final class DiscordSyncService {
         }
     }
 
-    private MessageStateStore.State loadInitialMessageState(Path statePath) {
+    private InitialMessageState loadInitialMessageState(Path statePath) {
         if (Files.exists(statePath)) {
             try {
-                return messageStateStore.load();
+                return new InitialMessageState(messageStateStore.load(), true);
             } catch (IOException ex) {
-                plugin.getLogger().severe("Could not read message-state.json; falling back to legacy config state.");
+                plugin.getLogger().severe("Could not read message-state.json. Discord synchronization is disabled "
+                        + "to prevent duplicate messages. Repair or remove the file after reconciling the Discord "
+                        + "messages, then restart the server.");
+                return new InitialMessageState(new MessageStateStore.State(List.of(), true), false);
             }
         }
 
@@ -245,7 +258,10 @@ public final class DiscordSyncService {
                 plugin.getLogger().severe("Could not migrate Discord message IDs to message-state.json.");
             }
         }
-        return new MessageStateStore.State(List.copyOf(sanitized), false);
+        return new InitialMessageState(new MessageStateStore.State(List.copyOf(sanitized), false), true);
+    }
+
+    private record InitialMessageState(MessageStateStore.State state, boolean usable) {
     }
 
     private void logSafeFailure(String reason, Exception exception) {

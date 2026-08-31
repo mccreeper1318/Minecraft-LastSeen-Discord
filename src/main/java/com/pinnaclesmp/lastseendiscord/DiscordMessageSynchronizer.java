@@ -45,7 +45,21 @@ final class DiscordMessageSynchronizer {
     }
 
     private void persist(List<String> messageIds) throws IOException {
-        state.persist(List.copyOf(messageIds));
+        List<String> snapshot = List.copyOf(messageIds);
+        try {
+            state.persist(snapshot);
+        } catch (IOException persistenceFailure) {
+            try {
+                state.blockCreate(snapshot);
+            } catch (IOException blockFailure) {
+                persistenceFailure.addSuppressed(blockFailure);
+            }
+            throw new SyncException(
+                    "Discord message state could not be saved. Automatic message creation is paused until "
+                            + "the state storage problem is fixed and /lsd recover-create confirm is run.",
+                    persistenceFailure
+            );
+        }
     }
 
     private String createSafely(WebhookEndpoint endpoint, String content, List<String> knownMessageIds)

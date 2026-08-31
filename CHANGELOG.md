@@ -19,6 +19,9 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Retry HTTP 429 responses, temporary network failures, timeouts, and Discord server errors with bounded exponential backoff and jitter.
 - Prevent ambiguous create requests from being retried when Discord may have accepted the message but its response was lost. A durable safety block now requires explicit administrator recovery before another create is attempted.
 - Preserve a successfully returned message ID even if plugin shutdown begins while its create request is in flight.
+- Treat a successful create response without a valid message ID as ambiguous and pause further creation.
+- Retain known message IDs in memory and pause creation if runtime-state persistence fails.
+- Disable synchronization when an existing `message-state.json` cannot be read instead of falling back to stale legacy state.
 
 ### Changed
 

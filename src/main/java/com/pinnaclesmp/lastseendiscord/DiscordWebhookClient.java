@@ -45,7 +45,9 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
 
         String messageId = JsonUtil.extractTopLevelString(response.body(), "id");
         if (!WebhookEndpoint.isValidMessageId(messageId)) {
-            throw new SyncException("Discord created a message but returned no valid top-level message ID.");
+            throw new AmbiguousCreateException(new SyncException(
+                    "Discord accepted the create request but returned no valid top-level message ID."
+            ));
         }
         return messageId;
     }

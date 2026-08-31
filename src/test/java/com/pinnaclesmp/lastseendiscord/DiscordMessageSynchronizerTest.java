@@ -100,10 +100,30 @@ class DiscordMessageSynchronizerTest {
         assertEquals(List.of("create:one"), client.events);
     }
 
+    @Test
+    void retainsCreatedIdAndBlocksMoreCreatesWhenPersistenceFails() throws Exception {
+        FakeClient client = new FakeClient("111111111111111111", "222222222222222222");
+        FakeState state = new FakeState();
+        state.failPersist = true;
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
+
+        assertThrows(SyncException.class, () -> synchronizer.synchronize(
+                ENDPOINT, List.of("one", "two"), List.of()
+        ));
+        assertEquals(true, state.createBlocked);
+        assertEquals(List.of(List.of("111111111111111111")), state.blockedStates);
+
+        assertThrows(SyncException.class, () -> synchronizer.synchronize(
+                ENDPOINT, List.of("one", "two"), List.of("111111111111111111")
+        ));
+        assertEquals(List.of("create:one", "edit:111111111111111111:one"), client.events);
+    }
+
     private static final class FakeState implements DiscordMessageSynchronizer.MessageState {
         private final List<List<String>> savedStates = new ArrayList<>();
         private final List<List<String>> blockedStates = new ArrayList<>();
         private boolean createBlocked;
+        private boolean failPersist;
 
         @Override
         public boolean isCreateBlocked() {
@@ -111,7 +131,10 @@ class DiscordMessageSynchronizerTest {
         }
 
         @Override
-        public void persist(List<String> messageIds) {
+        public void persist(List<String> messageIds) throws IOException {
+            if (failPersist) {
+                throw new IOException("simulated state storage failure");
+            }
             savedStates.add(messageIds);
         }
 
