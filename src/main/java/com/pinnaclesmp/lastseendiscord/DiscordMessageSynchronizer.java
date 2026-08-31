@@ -24,14 +24,14 @@ final class DiscordMessageSynchronizer {
                 if (result == EditResult.MISSING) {
                     String replacementId = createSafely(endpoint, content, messageIds);
                     messageIds.set(index, replacementId);
-                    persist(messageIds);
+                    completeCreate(messageIds);
                 }
                 continue;
             }
 
             String createdId = createSafely(endpoint, content, messageIds);
             messageIds.add(createdId);
-            persist(messageIds);
+            completeCreate(messageIds);
         }
 
         while (messageIds.size() > chunks.size()) {
@@ -71,11 +71,19 @@ final class DiscordMessageSynchronizer {
             );
         }
 
+        state.blockCreate(List.copyOf(knownMessageIds));
+        return client.create(endpoint, content);
+    }
+
+    private void completeCreate(List<String> messageIds) throws IOException {
         try {
-            return client.create(endpoint, content);
-        } catch (AmbiguousCreateException ex) {
-            state.blockCreate(List.copyOf(knownMessageIds));
-            throw ex;
+            state.completeCreate(List.copyOf(messageIds));
+        } catch (IOException ex) {
+            throw new SyncException(
+                    "The Discord message was created, but its ID could not be committed. Automatic message "
+                            + "creation remains paused until storage is fixed and recovery is confirmed.",
+                    ex
+            );
         }
     }
 
@@ -98,5 +106,7 @@ final class DiscordMessageSynchronizer {
         void persist(List<String> messageIds) throws IOException;
 
         void blockCreate(List<String> knownMessageIds) throws IOException;
+
+        void completeCreate(List<String> messageIds) throws IOException;
     }
 }

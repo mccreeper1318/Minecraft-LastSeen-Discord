@@ -111,7 +111,7 @@ class DiscordMessageSynchronizerTest {
                 ENDPOINT, List.of("one", "two"), List.of()
         ));
         assertEquals(true, state.createBlocked);
-        assertEquals(List.of(List.of("111111111111111111")), state.blockedStates);
+        assertEquals(List.of(List.of(), List.of("111111111111111111")), state.blockedStates);
 
         assertThrows(SyncException.class, () -> synchronizer.synchronize(
                 ENDPOINT, List.of("one", "two"), List.of("111111111111111111")
@@ -119,11 +119,25 @@ class DiscordMessageSynchronizerTest {
         assertEquals(List.of("create:one", "edit:111111111111111111:one"), client.events);
     }
 
+    @Test
+    void doesNotPostWhenCreateIntentCannotBePersisted() {
+        FakeClient client = new FakeClient("111111111111111111");
+        FakeState state = new FakeState();
+        state.failBlock = true;
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
+
+        assertThrows(IOException.class, () -> synchronizer.synchronize(
+                ENDPOINT, List.of("one"), List.of()
+        ));
+        assertEquals(List.of(), client.events);
+    }
+
     private static final class FakeState implements DiscordMessageSynchronizer.MessageState {
         private final List<List<String>> savedStates = new ArrayList<>();
         private final List<List<String>> blockedStates = new ArrayList<>();
         private boolean createBlocked;
         private boolean failPersist;
+        private boolean failBlock;
 
         @Override
         public boolean isCreateBlocked() {
@@ -139,9 +153,22 @@ class DiscordMessageSynchronizerTest {
         }
 
         @Override
-        public void blockCreate(List<String> knownMessageIds) {
+        public void blockCreate(List<String> knownMessageIds) throws IOException {
+            if (failBlock) {
+                throw new IOException("simulated write-ahead failure");
+            }
             createBlocked = true;
             blockedStates.add(knownMessageIds);
+        }
+
+        @Override
+        public void completeCreate(List<String> messageIds) throws IOException {
+            if (failPersist) {
+                blockedStates.add(messageIds);
+                throw new IOException("simulated state storage failure");
+            }
+            savedStates.add(messageIds);
+            createBlocked = false;
         }
     }
 

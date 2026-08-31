@@ -25,6 +25,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Preserve the valid single-message legacy ID when the configured legacy ID list contains only blank or invalid entries.
 - Treat HTTP 5xx responses to message creation as ambiguous outcomes so the create request is never retried automatically.
 - Disable synchronization when legacy message IDs cannot be migrated into durable runtime state.
+- Persist a write-ahead creation intent before every Discord POST, preventing message creation when runtime state is unwritable.
 
 ### Changed
 
