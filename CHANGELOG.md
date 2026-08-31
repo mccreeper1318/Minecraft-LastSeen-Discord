@@ -2,7 +2,7 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
-## [1.1.1] - Unreleased
+## [1.1.1]
 
 ### Security
 
