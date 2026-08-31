@@ -27,8 +27,8 @@ class DiscordMessageSynchronizerTest {
     @Test
     void persistsEveryCreatedIdBeforeCreatingTheNextPage() throws Exception {
         FakeClient client = new FakeClient("111111111111111111", "222222222222222222");
-        List<List<String>> savedStates = new ArrayList<>();
-        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, savedStates::add);
+        FakeState state = new FakeState();
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
 
         List<String> result = synchronizer.synchronize(ENDPOINT, List.of("one", "two"), List.of());
 
@@ -36,7 +36,7 @@ class DiscordMessageSynchronizerTest {
         assertEquals(List.of(
                 List.of("111111111111111111"),
                 List.of("111111111111111111", "222222222222222222")
-        ), savedStates);
+        ), state.savedStates);
         assertEquals(List.of("create:one", "create:two"), client.events);
     }
 
@@ -44,23 +44,23 @@ class DiscordMessageSynchronizerTest {
     void keepsFirstCreatedIdWhenALaterPageFails() throws Exception {
         FakeClient client = new FakeClient("111111111111111111");
         client.failCreateNumber = 2;
-        List<List<String>> savedStates = new ArrayList<>();
-        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, savedStates::add);
+        FakeState state = new FakeState();
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
 
         assertThrows(IOException.class, () -> synchronizer.synchronize(
                 ENDPOINT,
                 List.of("one", "two"),
                 List.of()
         ));
-        assertEquals(List.of(List.of("111111111111111111")), savedStates);
+        assertEquals(List.of(List.of("111111111111111111")), state.savedStates);
     }
 
     @Test
     void recreatesOnlyADeletedTrackedMessageAndPersistsReplacement() throws Exception {
         FakeClient client = new FakeClient("333333333333333333");
         client.missingIds.add("111111111111111111");
-        List<List<String>> savedStates = new ArrayList<>();
-        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, savedStates::add);
+        FakeState state = new FakeState();
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
 
         List<String> result = synchronizer.synchronize(
                 ENDPOINT,
@@ -69,12 +69,57 @@ class DiscordMessageSynchronizerTest {
         );
 
         assertEquals(List.of("333333333333333333", "222222222222222222"), result);
-        assertEquals(List.of(List.of("333333333333333333", "222222222222222222")), savedStates);
+        assertEquals(List.of(List.of("333333333333333333", "222222222222222222")), state.savedStates);
         assertEquals(List.of(
                 "edit:111111111111111111:one",
                 "create:one",
                 "edit:222222222222222222:two"
         ), client.events);
+    }
+
+    @Test
+    void ambiguousCreateIsDurablyBlockedAndNeverRetried() throws Exception {
+        FakeClient client = new FakeClient();
+        client.ambiguousCreateNumber = 1;
+        FakeState state = new FakeState();
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
+
+        assertThrows(AmbiguousCreateException.class, () -> synchronizer.synchronize(
+                ENDPOINT,
+                List.of("one"),
+                List.of()
+        ));
+        assertEquals(true, state.createBlocked);
+        assertEquals(List.of(List.of()), state.blockedStates);
+
+        assertThrows(SyncException.class, () -> synchronizer.synchronize(
+                ENDPOINT,
+                List.of("one"),
+                List.of()
+        ));
+        assertEquals(List.of("create:one"), client.events);
+    }
+
+    private static final class FakeState implements DiscordMessageSynchronizer.MessageState {
+        private final List<List<String>> savedStates = new ArrayList<>();
+        private final List<List<String>> blockedStates = new ArrayList<>();
+        private boolean createBlocked;
+
+        @Override
+        public boolean isCreateBlocked() {
+            return createBlocked;
+        }
+
+        @Override
+        public void persist(List<String> messageIds) {
+            savedStates.add(messageIds);
+        }
+
+        @Override
+        public void blockCreate(List<String> knownMessageIds) {
+            createBlocked = true;
+            blockedStates.add(knownMessageIds);
+        }
     }
 
     private static final class FakeClient implements DiscordMessageSynchronizer.MessageClient {
@@ -83,6 +128,7 @@ class DiscordMessageSynchronizerTest {
         private final List<String> events = new ArrayList<>();
         private int createCount;
         private int failCreateNumber = -1;
+        private int ambiguousCreateNumber = -1;
 
         private FakeClient(String... ids) {
             createdIds.addAll(List.of(ids));
@@ -94,6 +140,9 @@ class DiscordMessageSynchronizerTest {
             events.add("create:" + content);
             if (createCount == failCreateNumber) {
                 throw new IOException("simulated interruption");
+            }
+            if (createCount == ambiguousCreateNumber) {
+                throw new AmbiguousCreateException(new IOException("simulated lost response"));
             }
             return createdIds.removeFirst();
         }

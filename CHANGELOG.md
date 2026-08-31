@@ -17,6 +17,8 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Persist every newly created message ID atomically before continuing to the next page.
 - Recreate a tracked Discord message when Discord confirms that it was deleted, then immediately persist the replacement ID.
 - Retry HTTP 429 responses, temporary network failures, timeouts, and Discord server errors with bounded exponential backoff and jitter.
+- Prevent ambiguous create requests from being retried when Discord may have accepted the message but its response was lost. A durable safety block now requires explicit administrator recovery before another create is attempted.
+- Preserve a successfully returned message ID even if plugin shutdown begins while its create request is in flight.
 
 ### Changed
 
@@ -30,6 +32,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Add GitHub Actions validation for pushes and pull requests.
 - Add a release workflow that verifies the release tag, runs the tests, and attaches one versioned plugin JAR plus its SHA-256 checksum.
 - Add a server-owner README covering installation, configuration, commands, upgrades, behavior, troubleshooting, and source builds.
+- Add `/lsd recover-create confirm` for safely resuming creation after an administrator resolves an ambiguous Discord response.
 
 ## [1.1.0]
 

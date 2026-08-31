@@ -26,6 +26,7 @@ Treat the Discord webhook URL like a password. Anyone who has it can post throug
 |---|---|
 | `/lsd sync` | Queue an immediate Discord update. |
 | `/lsd reload` | Reload `config.yml`, restart the automatic schedule, and queue an update. |
+| `/lsd recover-create confirm` | Resume message creation after an ambiguous Discord response. Check the channel and remove any untracked duplicate page before confirming. |
 
 Both commands require `lastseendiscord.admin`, which defaults to server operators. `/lastseendiscord` is the full command name.
 
@@ -51,8 +52,10 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 - Discord requests run asynchronously and have finite connection and request timeouts.
 - Requests made during an active synchronization are coalesced into a guaranteed follow-up pass.
 - Discord rate limits, temporary network errors, and server errors retry with bounded exponential backoff.
+- A create request whose delivery cannot be determined is never retried automatically. The durable safety block prevents later scheduled updates and restarts from creating another page until an administrator resolves it.
 - If a tracked Discord message is deleted, only that page is recreated.
 - Each created or replacement message ID is saved atomically before the next page is processed.
+- A message ID returned while the plugin is shutting down is still saved before the worker exits.
 
 ## Updating from an older version
 
@@ -70,6 +73,7 @@ Existing configuration keys remain compatible with version 1.1.1.
 - **The plugin rejects the webhook URL:** Create or copy a standard HTTPS webhook URL from Discord. Proxy URLs and non-Discord hosts are not accepted.
 - **The list is temporarily stale:** Check the server log for a sanitized HTTP status or retry notice. Temporary failures retry automatically, and `/lsd sync` can queue another update.
 - **A Discord page was deleted:** Run `/lsd sync`; the missing page is recreated and its new ID is saved automatically.
+- **Message creation is paused after an unknown outcome:** Inspect the Discord channel for the page that may have been created. Delete any untracked duplicate page, then run `/lsd recover-create confirm` to clear the durable safety block and synchronize again.
 - **The build fails locally:** Use JDK 25 and run `./gradlew clean test build`.
 
 ## Building from source

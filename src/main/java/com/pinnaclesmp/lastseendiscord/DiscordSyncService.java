@@ -30,6 +30,7 @@ public final class DiscordSyncService {
     private final Object lifecycleLock = new Object();
 
     private volatile List<String> messageIds;
+    private volatile boolean createOutcomeUnknown;
     private BukkitTask retryTask;
     private int retryAttempt;
 
@@ -37,11 +38,31 @@ public final class DiscordSyncService {
         this.plugin = plugin;
         Path statePath = plugin.getDataFolder().toPath().resolve("message-state.json");
         this.messageStateStore = new MessageStateStore(statePath);
-        this.messageIds = loadInitialMessageIds(statePath);
+        MessageStateStore.State initialState = loadInitialMessageState(statePath);
+        this.messageIds = initialState.messageIds();
+        this.createOutcomeUnknown = initialState.createOutcomeUnknown();
 
         String userAgent = plugin.getDescription().getName() + "/" + plugin.getDescription().getVersion();
         DiscordWebhookClient webhookClient = new DiscordWebhookClient(userAgent);
-        this.messageSynchronizer = new DiscordMessageSynchronizer(webhookClient, this::persistMessageIds);
+        this.messageSynchronizer = new DiscordMessageSynchronizer(
+                webhookClient,
+                new DiscordMessageSynchronizer.MessageState() {
+                    @Override
+                    public boolean isCreateBlocked() {
+                        return createOutcomeUnknown;
+                    }
+
+                    @Override
+                    public void persist(List<String> updatedMessageIds) throws IOException {
+                        persistMessageIds(updatedMessageIds);
+                    }
+
+                    @Override
+                    public void blockCreate(List<String> knownMessageIds) throws IOException {
+                        markCreateOutcomeUnknown(knownMessageIds);
+                    }
+                }
+        );
     }
 
     public void requestSync(String reason) {
@@ -64,6 +85,17 @@ public final class DiscordSyncService {
                 retryTask.cancel();
                 retryTask = null;
             }
+        }
+    }
+
+    public boolean recoverAmbiguousCreate() throws IOException {
+        synchronized (lifecycleLock) {
+            if (!createOutcomeUnknown) {
+                return false;
+            }
+            messageStateStore.save(messageIds, false);
+            createOutcomeUnknown = false;
+            return true;
         }
     }
 
@@ -171,15 +203,20 @@ public final class DiscordSyncService {
 
     private void persistMessageIds(List<String> updatedMessageIds) throws IOException {
         synchronized (lifecycleLock) {
-            if (requestQueue.isStopped()) {
-                throw new SyncException("The plugin disabled before Discord message state could be saved.");
-            }
-            messageStateStore.save(updatedMessageIds);
+            messageStateStore.save(updatedMessageIds, createOutcomeUnknown);
             messageIds = List.copyOf(updatedMessageIds);
         }
     }
 
-    private List<String> loadInitialMessageIds(Path statePath) {
+    private void markCreateOutcomeUnknown(List<String> knownMessageIds) throws IOException {
+        synchronized (lifecycleLock) {
+            createOutcomeUnknown = true;
+            messageIds = List.copyOf(knownMessageIds);
+            messageStateStore.save(messageIds, true);
+        }
+    }
+
+    private MessageStateStore.State loadInitialMessageState(Path statePath) {
         if (Files.exists(statePath)) {
             try {
                 return messageStateStore.load();
@@ -202,13 +239,13 @@ public final class DiscordSyncService {
         }
         if (!sanitized.isEmpty()) {
             try {
-                messageStateStore.save(sanitized);
+                messageStateStore.save(sanitized, false);
                 plugin.getLogger().info("Migrated Discord message IDs to message-state.json.");
             } catch (IOException ex) {
                 plugin.getLogger().severe("Could not migrate Discord message IDs to message-state.json.");
             }
         }
-        return List.copyOf(sanitized);
+        return new MessageStateStore.State(List.copyOf(sanitized), false);
     }
 
     private void logSafeFailure(String reason, Exception exception) {

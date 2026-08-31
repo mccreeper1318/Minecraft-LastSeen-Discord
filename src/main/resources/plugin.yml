@@ -7,8 +7,8 @@ website: https://pinnaclesmp.org
 description: Syncs server member activity status to Discord.
 commands:
   lastseendiscord:
-    description: Reloads the LastSeenDiscord config and forces a Discord sync.
-    usage: /<command> reload|sync
+    description: Manages LastSeenDiscord configuration and synchronization.
+    usage: /<command> reload|sync|recover-create
     permission: lastseendiscord.admin
     aliases: [lsd]
 permissions:

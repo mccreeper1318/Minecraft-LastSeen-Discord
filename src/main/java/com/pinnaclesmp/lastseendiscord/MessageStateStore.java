@@ -16,7 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 final class MessageStateStore {
-    private static final int STATE_VERSION = 1;
+    private static final int STATE_VERSION = 2;
     private static final Gson GSON = new Gson();
 
     private final Path stateFile;
@@ -25,27 +25,29 @@ final class MessageStateStore {
         this.stateFile = stateFile;
     }
 
-    List<String> load() throws IOException {
+    State load() throws IOException {
         if (!Files.exists(stateFile)) {
-            return List.of();
+            return new State(List.of(), false);
         }
 
         try {
             StateDocument document = GSON.fromJson(Files.readString(stateFile, StandardCharsets.UTF_8), StateDocument.class);
-            if (document == null || document.version != STATE_VERSION || document.messageIds == null) {
+            if (document == null
+                    || (document.version != 1 && document.version != STATE_VERSION)
+                    || document.messageIds == null) {
                 throw new IOException("The Discord message state file has an unsupported format.");
             }
             List<String> sanitized = sanitize(document.messageIds);
             if (sanitized.size() != document.messageIds.size()) {
                 throw new IOException("The Discord message state file contains invalid or duplicate IDs.");
             }
-            return sanitized;
+            return new State(List.copyOf(sanitized), document.version >= 2 && document.createOutcomeUnknown);
         } catch (JsonParseException ex) {
             throw new IOException("The Discord message state file is not valid JSON.", ex);
         }
     }
 
-    void save(List<String> messageIds) throws IOException {
+    void save(List<String> messageIds, boolean createOutcomeUnknown) throws IOException {
         List<String> safeIds = sanitize(messageIds);
         if (safeIds.size() != messageIds.size()) {
             throw new IOException("Refusing to persist invalid Discord message IDs.");
@@ -54,7 +56,8 @@ final class MessageStateStore {
         Path directory = stateFile.getParent();
         Files.createDirectories(directory);
         Path temporaryFile = directory.resolve(stateFile.getFileName() + ".tmp");
-        String json = GSON.toJson(new StateDocument(STATE_VERSION, safeIds)) + System.lineSeparator();
+        String json = GSON.toJson(new StateDocument(STATE_VERSION, safeIds, createOutcomeUnknown))
+                + System.lineSeparator();
         Files.writeString(
                 temporaryFile,
                 json,
@@ -93,6 +96,9 @@ final class MessageStateStore {
         return new ArrayList<>(unique);
     }
 
-    private record StateDocument(int version, List<String> messageIds) {
+    record State(List<String> messageIds, boolean createOutcomeUnknown) {
+    }
+
+    private record StateDocument(int version, List<String> messageIds, boolean createOutcomeUnknown) {
     }
 }

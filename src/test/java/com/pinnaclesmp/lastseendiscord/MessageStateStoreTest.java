@@ -23,20 +23,21 @@ class MessageStateStoreTest {
         MessageStateStore store = new MessageStateStore(stateFile);
         List<String> ids = List.of("111111111111111111", "222222222222222222");
 
-        store.save(ids);
+        store.save(ids, false);
 
-        assertEquals(ids, store.load());
+        assertEquals(ids, store.load().messageIds());
+        assertFalse(store.load().createOutcomeUnknown());
         assertFalse(Files.exists(stateFile.resolveSibling("message-state.json.tmp")));
     }
 
     @Test
     void refusesToPersistMalformedOrDuplicateIds() {
         MessageStateStore store = new MessageStateStore(temporaryDirectory.resolve("message-state.json"));
-        assertThrows(IOException.class, () -> store.save(List.of("not-an-id")));
+        assertThrows(IOException.class, () -> store.save(List.of("not-an-id"), false));
         assertThrows(IOException.class, () -> store.save(List.of(
                 "111111111111111111",
                 "111111111111111111"
-        )));
+        ), false));
     }
 
     @Test
@@ -46,5 +47,17 @@ class MessageStateStoreTest {
         MessageStateStore store = new MessageStateStore(stateFile);
 
         assertThrows(IOException.class, store::load);
+    }
+
+    @Test
+    void persistsAmbiguousCreateBlockAcrossReloads() throws Exception {
+        Path stateFile = temporaryDirectory.resolve("message-state.json");
+        MessageStateStore store = new MessageStateStore(stateFile);
+
+        store.save(List.of("111111111111111111"), true);
+
+        MessageStateStore.State state = store.load();
+        assertEquals(List.of("111111111111111111"), state.messageIds());
+        assertEquals(true, state.createOutcomeUnknown());
     }
 }

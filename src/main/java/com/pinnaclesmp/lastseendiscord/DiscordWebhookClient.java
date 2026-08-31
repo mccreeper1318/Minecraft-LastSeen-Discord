@@ -32,7 +32,15 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         HttpRequest request = baseRequest(endpoint.executeUri())
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody(content), StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> response = send(request, "create a Discord webhook message");
+        final HttpResponse<String> response;
+        try {
+            response = send(request, "create a Discord webhook message");
+        } catch (RetryableSyncException ex) {
+            if (ex.deliveryMayBeAmbiguous()) {
+                throw new AmbiguousCreateException(ex);
+            }
+            throw ex;
+        }
         ensureSuccess(response, "create a Discord webhook message");
 
         String messageId = JsonUtil.extractTopLevelString(response.body(), "id");

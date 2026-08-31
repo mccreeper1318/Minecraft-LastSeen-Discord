@@ -6,11 +6,11 @@ import java.util.List;
 
 final class DiscordMessageSynchronizer {
     private final MessageClient client;
-    private final MessageStateSink stateSink;
+    private final MessageState state;
 
-    DiscordMessageSynchronizer(MessageClient client, MessageStateSink stateSink) {
+    DiscordMessageSynchronizer(MessageClient client, MessageState state) {
         this.client = client;
-        this.stateSink = stateSink;
+        this.state = state;
     }
 
     List<String> synchronize(WebhookEndpoint endpoint, List<String> chunks, List<String> initialMessageIds)
@@ -22,14 +22,14 @@ final class DiscordMessageSynchronizer {
             if (index < messageIds.size()) {
                 EditResult result = client.edit(endpoint, messageIds.get(index), content);
                 if (result == EditResult.MISSING) {
-                    String replacementId = client.create(endpoint, content);
+                    String replacementId = createSafely(endpoint, content, messageIds);
                     messageIds.set(index, replacementId);
                     persist(messageIds);
                 }
                 continue;
             }
 
-            String createdId = client.create(endpoint, content);
+            String createdId = createSafely(endpoint, content, messageIds);
             messageIds.add(createdId);
             persist(messageIds);
         }
@@ -45,7 +45,24 @@ final class DiscordMessageSynchronizer {
     }
 
     private void persist(List<String> messageIds) throws IOException {
-        stateSink.persist(List.copyOf(messageIds));
+        state.persist(List.copyOf(messageIds));
+    }
+
+    private String createSafely(WebhookEndpoint endpoint, String content, List<String> knownMessageIds)
+            throws IOException, InterruptedException {
+        if (state.isCreateBlocked()) {
+            throw new SyncException(
+                    "Automatic Discord message creation is paused after an earlier create returned an unknown "
+                            + "outcome. Inspect the channel, then use /lsd recover-create confirm."
+            );
+        }
+
+        try {
+            return client.create(endpoint, content);
+        } catch (AmbiguousCreateException ex) {
+            state.blockCreate(List.copyOf(knownMessageIds));
+            throw ex;
+        }
     }
 
     enum EditResult {
@@ -61,7 +78,11 @@ final class DiscordMessageSynchronizer {
         void delete(WebhookEndpoint endpoint, String messageId) throws IOException, InterruptedException;
     }
 
-    interface MessageStateSink {
+    interface MessageState {
+        boolean isCreateBlocked();
+
         void persist(List<String> messageIds) throws IOException;
+
+        void blockCreate(List<String> knownMessageIds) throws IOException;
     }
 }
