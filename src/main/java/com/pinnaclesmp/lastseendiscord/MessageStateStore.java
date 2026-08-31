@@ -75,6 +75,9 @@ final class MessageStateStore {
                 StandardCopyOption.ATOMIC_MOVE,
                 StandardCopyOption.REPLACE_EXISTING
         );
+        try (FileChannel directoryChannel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            directoryChannel.force(true);
+        }
     }
 
     static List<String> sanitize(List<String> messageIds) {

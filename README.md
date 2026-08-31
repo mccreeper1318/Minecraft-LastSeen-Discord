@@ -77,6 +77,7 @@ Existing configuration keys remain compatible with version 1.1.1.
 - **`message-state.json` cannot be read:** Synchronization stops to avoid creating duplicate messages. Reconcile the managed messages in Discord, then repair, restore, or remove the invalid state file while the server is stopped and restart the server.
 - **Legacy message-ID migration fails:** Synchronization also stops if durable runtime state cannot be created. Fix the plugin data directory permissions or free disk space, then restart the server.
 - **Atomic state replacement is unsupported:** Place the plugin data directory on a filesystem that supports atomic file moves. Synchronization fails closed rather than risking a corrupted or missing message-state record.
+- **State-directory synchronization is unsupported:** Runtime state also requires the filesystem to support syncing directory metadata after an atomic move. The plugin fails closed if it cannot confirm that the rename is durable.
 - **The build fails locally:** Use JDK 25 and run `./gradlew clean test build`.
 
 ## Building from source

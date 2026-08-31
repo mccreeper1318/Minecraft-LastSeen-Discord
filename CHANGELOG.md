@@ -31,6 +31,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Keep non-create persistence safety blocks recoverable by distinguishing them from active create intents.
 - Treat only Discord's explicit unknown-message response as a successful deletion; propagate other HTTP 404 errors.
 - Require atomic runtime-state replacement instead of risking a missing or truncated safety record on unsupported filesystems.
+- Force state-directory metadata to stable storage after atomic replacement before allowing Discord synchronization to continue.
 
 ### Changed
 
