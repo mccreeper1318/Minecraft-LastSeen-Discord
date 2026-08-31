@@ -6,6 +6,8 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.IOException;
+
 public final class LastSeenDiscordPlugin extends JavaPlugin {
     private DiscordSyncService discordSyncService;
     private long schedulerTaskId = -1L;
@@ -27,6 +29,9 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         stopScheduler();
+        if (discordSyncService != null) {
+            discordSyncService.shutdown();
+        }
         getLogger().info("LastSeenDiscord disabled.");
     }
 
@@ -66,7 +71,7 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
         }
 
         if (args.length == 0) {
-            sender.sendMessage("§eUsage: /" + label + " <reload|sync>");
+            sender.sendMessage("§eUsage: /" + label + " <reload|sync|recover-create>");
             return true;
         }
 
@@ -84,7 +89,30 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
             return true;
         }
 
-        sender.sendMessage("§eUsage: /" + label + " <reload|sync>");
+        if (args[0].equalsIgnoreCase("recover-create")) {
+            if (args.length < 2 || !args[1].equalsIgnoreCase("confirm")) {
+                sender.sendMessage("§cOnly use this after checking Discord and deleting any untracked duplicate page.");
+                sender.sendMessage("§eTo continue: /" + label + " recover-create confirm");
+                return true;
+            }
+
+            try {
+                if (!discordSyncService.recoverAmbiguousCreate()) {
+                    sender.sendMessage("§eDiscord message creation is not currently paused.");
+                    return true;
+                }
+            } catch (IOException ex) {
+                sender.sendMessage("§cCould not save the recovered Discord message state. Check the server log.");
+                getLogger().severe("Could not clear the ambiguous Discord create state.");
+                return true;
+            }
+
+            sender.sendMessage("§aCleared the ambiguous create state and queued a Discord sync.");
+            discordSyncService.requestSync("manual ambiguous-create recovery");
+            return true;
+        }
+
+        sender.sendMessage("§eUsage: /" + label + " <reload|sync|recover-create>");
         return true;
     }
 
