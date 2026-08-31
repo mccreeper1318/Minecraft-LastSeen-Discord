@@ -41,6 +41,15 @@ class MessageStateStoreTest {
     }
 
     @Test
+    void failsWhenTheStateDirectoryCannotBeCreated() throws Exception {
+        Path occupiedDirectory = temporaryDirectory.resolve("occupied");
+        Files.writeString(occupiedDirectory, "not a directory", StandardCharsets.UTF_8);
+        MessageStateStore store = new MessageStateStore(occupiedDirectory.resolve("message-state.json"));
+
+        assertThrows(IOException.class, () -> store.save(List.of("111111111111111111"), false));
+    }
+
+    @Test
     void rejectsMalformedStateJson() throws Exception {
         Path stateFile = temporaryDirectory.resolve("message-state.json");
         Files.writeString(stateFile, "{not-json", StandardCharsets.UTF_8);

@@ -75,6 +75,7 @@ Existing configuration keys remain compatible with version 1.1.1.
 - **A Discord page was deleted:** Run `/lsd sync`; the missing page is recreated and its new ID is saved automatically.
 - **Message creation is paused after an unknown outcome:** Inspect the Discord channel for the page that may have been created. Delete any untracked duplicate page, then run `/lsd recover-create confirm` to clear the durable safety block and synchronize again.
 - **`message-state.json` cannot be read:** Synchronization stops to avoid creating duplicate messages. Reconcile the managed messages in Discord, then repair, restore, or remove the invalid state file while the server is stopped and restart the server.
+- **Legacy message-ID migration fails:** Synchronization also stops if durable runtime state cannot be created. Fix the plugin data directory permissions or free disk space, then restart the server.
 - **The build fails locally:** Use JDK 25 and run `./gradlew clean test build`.
 
 ## Building from source

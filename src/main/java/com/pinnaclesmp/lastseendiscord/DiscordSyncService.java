@@ -93,8 +93,8 @@ public final class DiscordSyncService {
     public boolean recoverAmbiguousCreate() throws IOException {
         synchronized (lifecycleLock) {
             if (!runtimeStateUsable) {
-                throw new SyncException("message-state.json could not be read. Repair or remove it after "
-                        + "reconciling the Discord messages, then restart the server.");
+                throw new SyncException("Discord runtime state is unavailable. Repair state storage and reconcile "
+                        + "the Discord messages if needed, then restart the server.");
             }
             if (!createOutcomeUnknown) {
                 return false;
@@ -192,8 +192,8 @@ public final class DiscordSyncService {
 
     private SyncSnapshot createSyncSnapshot() {
         if (!runtimeStateUsable) {
-            return SyncSnapshot.unconfigured("Skipping Discord sync: message-state.json could not be read. "
-                    + "Repair or remove it after reconciling the Discord messages, then restart the server.");
+            return SyncSnapshot.unconfigured("Skipping Discord sync: runtime state is unavailable. Repair state "
+                    + "storage and reconcile the Discord messages if needed, then restart the server.");
         }
         FileConfiguration config = plugin.config();
         String configuredUrl = config.getString("discord.webhook-url", "").trim();
@@ -252,7 +252,13 @@ public final class DiscordSyncService {
                 messageStateStore.save(sanitized, false);
                 plugin.getLogger().info("Migrated Discord message IDs to message-state.json.");
             } catch (IOException ex) {
-                plugin.getLogger().severe("Could not migrate Discord message IDs to message-state.json.");
+                plugin.getLogger().severe("Could not migrate Discord message IDs to message-state.json. Discord "
+                        + "synchronization is disabled to prevent untracked messages. Fix state storage, then "
+                        + "restart the server.");
+                return new InitialMessageState(
+                        new MessageStateStore.State(List.copyOf(sanitized), true),
+                        false
+                );
             }
         }
         return new InitialMessageState(new MessageStateStore.State(List.copyOf(sanitized), false), true);

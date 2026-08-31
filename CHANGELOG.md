@@ -24,6 +24,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Disable synchronization when an existing `message-state.json` cannot be read instead of falling back to stale legacy state.
 - Preserve the valid single-message legacy ID when the configured legacy ID list contains only blank or invalid entries.
 - Treat HTTP 5xx responses to message creation as ambiguous outcomes so the create request is never retried automatically.
+- Disable synchronization when legacy message IDs cannot be migrated into durable runtime state.
 
 ### Changed
 
