@@ -1,14 +1,9 @@
 discord:
   webhook-url: "PUT_DISCORD_WEBHOOK_URL_HERE"
-  # Leave this list empty on first run. The plugin will create as many webhook
-  # messages as needed to fit the player list and save all message IDs.
-  # On future updates, IDs are patched in order, extra IDs are created when needed,
-  # and stale IDs are deleted when fewer chunks are required.
-  # Backward compatibility: if legacy `message-id` is present, it is migrated into
-  # this list on the first successful sync.
+  # Deprecated runtime state from versions through 1.1.0. Version 1.1.1 migrates
+  # these IDs to message-state.json and maintains them there atomically.
   message-ids: []
-  # Legacy single-message setting retained for backward compatibility migration.
-  # New installs should leave this blank and use `message-ids` above.
+  # Older single-message value retained only for automatic migration.
   message-id: ""
   # Optional heading shown above the player list.
   header: "**Server Activity Status**"

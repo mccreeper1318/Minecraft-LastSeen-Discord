@@ -27,6 +27,9 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         stopScheduler();
+        if (discordSyncService != null) {
+            discordSyncService.shutdown();
+        }
         getLogger().info("LastSeenDiscord disabled.");
     }
 

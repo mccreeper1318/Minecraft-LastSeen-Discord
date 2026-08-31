@@ -1,0 +1,65 @@
+name: Publish release artifact
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Verify release version and build
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(./gradlew -q printVersion)"
+          if [[ "${GITHUB_REF_NAME}" != "v${VERSION}" ]]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match project version v${VERSION}." >&2
+            exit 1
+          fi
+
+          ./gradlew clean test build
+          EXPECTED_JAR="build/libs/lastseen-discord-${VERSION}.jar"
+          if [[ ! -f "${EXPECTED_JAR}" ]]; then
+            echo "Expected plugin artifact ${EXPECTED_JAR} was not produced." >&2
+            exit 1
+          fi
+
+          mapfile -t JARS < <(find build/libs -maxdepth 1 -type f -name '*.jar' -print)
+          if [[ "${#JARS[@]}" -ne 1 ]]; then
+            echo "Expected exactly one release JAR, found ${#JARS[@]}." >&2
+            exit 1
+          fi
+
+          CHECKSUM="${EXPECTED_JAR}.sha256"
+          (
+            cd build/libs
+            sha256sum "$(basename "${EXPECTED_JAR}")" > "$(basename "${CHECKSUM}")"
+          )
+          echo "jar=${EXPECTED_JAR}" >> "${GITHUB_OUTPUT}"
+          echo "checksum=${CHECKSUM}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attach JAR and checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          gh release upload "${GITHUB_REF_NAME}"
+          "${{ steps.artifact.outputs.jar }}"
+          "${{ steps.artifact.outputs.checksum }}"
+          --clobber

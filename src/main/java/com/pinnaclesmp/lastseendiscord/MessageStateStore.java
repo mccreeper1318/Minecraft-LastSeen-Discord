@@ -1,0 +1,98 @@
+package com.pinnaclesmp.lastseendiscord;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
+
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+
+final class MessageStateStore {
+    private static final int STATE_VERSION = 1;
+    private static final Gson GSON = new Gson();
+
+    private final Path stateFile;
+
+    MessageStateStore(Path stateFile) {
+        this.stateFile = stateFile;
+    }
+
+    List<String> load() throws IOException {
+        if (!Files.exists(stateFile)) {
+            return List.of();
+        }
+
+        try {
+            StateDocument document = GSON.fromJson(Files.readString(stateFile, StandardCharsets.UTF_8), StateDocument.class);
+            if (document == null || document.version != STATE_VERSION || document.messageIds == null) {
+                throw new IOException("The Discord message state file has an unsupported format.");
+            }
+            List<String> sanitized = sanitize(document.messageIds);
+            if (sanitized.size() != document.messageIds.size()) {
+                throw new IOException("The Discord message state file contains invalid or duplicate IDs.");
+            }
+            return sanitized;
+        } catch (JsonParseException ex) {
+            throw new IOException("The Discord message state file is not valid JSON.", ex);
+        }
+    }
+
+    void save(List<String> messageIds) throws IOException {
+        List<String> safeIds = sanitize(messageIds);
+        if (safeIds.size() != messageIds.size()) {
+            throw new IOException("Refusing to persist invalid Discord message IDs.");
+        }
+
+        Path directory = stateFile.getParent();
+        Files.createDirectories(directory);
+        Path temporaryFile = directory.resolve(stateFile.getFileName() + ".tmp");
+        String json = GSON.toJson(new StateDocument(STATE_VERSION, safeIds)) + System.lineSeparator();
+        Files.writeString(
+                temporaryFile,
+                json,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        );
+        try (FileChannel channel = FileChannel.open(temporaryFile, StandardOpenOption.WRITE)) {
+            channel.force(true);
+        }
+
+        try {
+            Files.move(
+                    temporaryFile,
+                    stateFile,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(temporaryFile, stateFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    static List<String> sanitize(List<String> messageIds) {
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        for (String messageId : messageIds) {
+            if (messageId == null) {
+                continue;
+            }
+            String trimmed = messageId.trim();
+            if (WebhookEndpoint.isValidMessageId(trimmed)) {
+                unique.add(trimmed);
+            }
+        }
+        return new ArrayList<>(unique);
+    }
+
+    private record StateDocument(int version, List<String> messageIds) {
+    }
+}
