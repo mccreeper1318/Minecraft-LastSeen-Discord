@@ -90,6 +90,7 @@ class DiscordMessageSynchronizerTest {
                 List.of()
         ));
         assertEquals(true, state.createBlocked);
+        assertEquals(false, state.createInProgress);
         assertEquals(List.of(List.of()), state.blockedStates);
 
         assertThrows(SyncException.class, () -> synchronizer.synchronize(
@@ -157,6 +158,7 @@ class DiscordMessageSynchronizerTest {
         private final List<List<String>> blockedStates = new ArrayList<>();
         private final List<List<String>> cancelledStates = new ArrayList<>();
         private boolean createBlocked;
+        private boolean createInProgress;
         private boolean failPersist;
         private boolean failBlock;
 
@@ -179,23 +181,34 @@ class DiscordMessageSynchronizerTest {
                 throw new IOException("simulated write-ahead failure");
             }
             createBlocked = true;
+            createInProgress = true;
             blockedStates.add(knownMessageIds);
         }
 
         @Override
         public void completeCreate(List<String> messageIds) throws IOException {
-            if (failPersist) {
-                blockedStates.add(messageIds);
-                throw new IOException("simulated state storage failure");
+            try {
+                if (failPersist) {
+                    blockedStates.add(messageIds);
+                    throw new IOException("simulated state storage failure");
+                }
+                savedStates.add(messageIds);
+                createBlocked = false;
+            } finally {
+                createInProgress = false;
             }
-            savedStates.add(messageIds);
-            createBlocked = false;
         }
 
         @Override
         public void cancelCreate(List<String> knownMessageIds) {
             cancelledStates.add(knownMessageIds);
             createBlocked = false;
+            createInProgress = false;
+        }
+
+        @Override
+        public void finishCreateAttempt() {
+            createInProgress = false;
         }
     }
 

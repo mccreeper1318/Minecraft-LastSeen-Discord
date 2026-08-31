@@ -31,6 +31,7 @@ public final class DiscordSyncService {
 
     private volatile List<String> messageIds;
     private volatile boolean createOutcomeUnknown;
+    private volatile boolean createInProgress;
     private final boolean runtimeStateUsable;
     private BukkitTask retryTask;
     private int retryAttempt;
@@ -73,6 +74,11 @@ public final class DiscordSyncService {
                     public void cancelCreate(List<String> knownMessageIds) throws IOException {
                         cancelMessageCreate(knownMessageIds);
                     }
+
+                    @Override
+                    public void finishCreateAttempt() {
+                        createInProgress = false;
+                    }
                 }
         );
     }
@@ -102,6 +108,10 @@ public final class DiscordSyncService {
 
     public boolean recoverAmbiguousCreate() throws IOException {
         synchronized (lifecycleLock) {
+            if (createInProgress) {
+                throw new SyncException("A Discord message create request is still in progress. Wait for it to "
+                        + "finish before confirming recovery.");
+            }
             if (!runtimeStateUsable) {
                 throw new SyncException("Discord runtime state is unavailable. Repair state storage and reconcile "
                         + "the Discord messages if needed, then restart the server.");
@@ -233,23 +243,32 @@ public final class DiscordSyncService {
             createOutcomeUnknown = true;
             messageIds = List.copyOf(knownMessageIds);
             messageStateStore.save(messageIds, true);
+            createInProgress = true;
         }
     }
 
     private void completeMessageCreate(List<String> updatedMessageIds) throws IOException {
         synchronized (lifecycleLock) {
-            messageIds = List.copyOf(updatedMessageIds);
-            messageStateStore.save(messageIds, false);
-            createOutcomeUnknown = false;
+            try {
+                messageIds = List.copyOf(updatedMessageIds);
+                messageStateStore.save(messageIds, false);
+                createOutcomeUnknown = false;
+            } finally {
+                createInProgress = false;
+            }
         }
     }
 
     private void cancelMessageCreate(List<String> knownMessageIds) throws IOException {
         synchronized (lifecycleLock) {
-            List<String> safeIds = List.copyOf(knownMessageIds);
-            messageStateStore.save(safeIds, false);
-            messageIds = safeIds;
-            createOutcomeUnknown = false;
+            try {
+                List<String> safeIds = List.copyOf(knownMessageIds);
+                messageStateStore.save(safeIds, false);
+                messageIds = safeIds;
+                createOutcomeUnknown = false;
+            } finally {
+                createInProgress = false;
+            }
         }
     }
 

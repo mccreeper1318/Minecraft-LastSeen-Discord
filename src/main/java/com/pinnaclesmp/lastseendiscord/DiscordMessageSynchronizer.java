@@ -75,14 +75,20 @@ final class DiscordMessageSynchronizer {
         try {
             return client.create(endpoint, content);
         } catch (AmbiguousCreateException ex) {
+            state.finishCreateAttempt();
             throw ex;
         } catch (RetryableSyncException ex) {
             if (!ex.deliveryMayBeAmbiguous()) {
                 cancelCreateIntent(knownMessageIds, ex);
+            } else {
+                state.finishCreateAttempt();
             }
             throw ex;
         } catch (SyncException ex) {
             cancelCreateIntent(knownMessageIds, ex);
+            throw ex;
+        } catch (IOException | InterruptedException ex) {
+            state.finishCreateAttempt();
             throw ex;
         }
     }
@@ -135,5 +141,7 @@ final class DiscordMessageSynchronizer {
         void completeCreate(List<String> messageIds) throws IOException;
 
         void cancelCreate(List<String> knownMessageIds) throws IOException;
+
+        void finishCreateAttempt();
     }
 }
