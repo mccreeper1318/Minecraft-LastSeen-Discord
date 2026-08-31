@@ -70,7 +70,7 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
     public void delete(WebhookEndpoint endpoint, String messageId) throws IOException, InterruptedException {
         HttpRequest request = baseRequest(endpoint.messageUri(messageId)).DELETE().build();
         HttpResponse<String> response = send(request, "delete a Discord webhook message", false);
-        if (response.statusCode() != 404) {
+        if (!isSuccessfulDeleteResponse(response.statusCode(), response.body())) {
             ensureSuccess(response, "delete a Discord webhook message");
         }
     }
@@ -130,6 +130,11 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         }
         Double discordCode = JsonUtil.extractTopLevelNumber(responseBody, "code");
         return discordCode != null && discordCode.longValue() == 10_008L;
+    }
+
+    static boolean isSuccessfulDeleteResponse(int statusCode, String responseBody) {
+        return (statusCode >= 200 && statusCode < 300)
+                || isUnknownMessageResponse(statusCode, responseBody);
     }
 
     private static Double parsePositiveNumber(String value) {

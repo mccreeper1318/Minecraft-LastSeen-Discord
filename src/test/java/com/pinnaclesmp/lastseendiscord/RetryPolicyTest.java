@@ -54,6 +54,19 @@ class RetryPolicyTest {
     }
 
     @Test
+    void deletionIgnoresOnlySuccessAndUnknownMessageResponses() {
+        assertTrue(DiscordWebhookClient.isSuccessfulDeleteResponse(204, ""));
+        assertTrue(DiscordWebhookClient.isSuccessfulDeleteResponse(
+                404,
+                "{\"message\":\"Unknown Message\",\"code\":10008}"
+        ));
+        assertTrue(!DiscordWebhookClient.isSuccessfulDeleteResponse(
+                404,
+                "{\"message\":\"Unknown Webhook\",\"code\":10015}"
+        ));
+    }
+
+    @Test
     void createServerFailuresCanBeMarkedAsAmbiguous() {
         RetryableSyncException exception = new RetryableSyncException(
                 "Discord temporarily failed a create request.",

@@ -29,6 +29,8 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Clear the write-ahead intent before retrying a create request that Discord definitively rejected, including HTTP 429 responses.
 - Reject manual create recovery while a Discord create request is still in flight.
 - Keep non-create persistence safety blocks recoverable by distinguishing them from active create intents.
+- Treat only Discord's explicit unknown-message response as a successful deletion; propagate other HTTP 404 errors.
+- Require atomic runtime-state replacement instead of risking a missing or truncated safety record on unsupported filesystems.
 
 ### Changed
 
