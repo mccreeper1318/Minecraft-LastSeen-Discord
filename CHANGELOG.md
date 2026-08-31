@@ -28,6 +28,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Persist a write-ahead creation intent before every Discord POST, preventing message creation when runtime state is unwritable.
 - Clear the write-ahead intent before retrying a create request that Discord definitively rejected, including HTTP 429 responses.
 - Reject manual create recovery while a Discord create request is still in flight.
+- Keep non-create persistence safety blocks recoverable by distinguishing them from active create intents.
 
 ### Changed
 

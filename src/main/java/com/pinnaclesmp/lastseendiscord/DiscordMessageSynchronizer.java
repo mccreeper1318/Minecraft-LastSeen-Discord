@@ -71,7 +71,7 @@ final class DiscordMessageSynchronizer {
             );
         }
 
-        state.blockCreate(List.copyOf(knownMessageIds));
+        state.beginCreate(List.copyOf(knownMessageIds));
         try {
             return client.create(endpoint, content);
         } catch (AmbiguousCreateException ex) {
@@ -137,6 +137,8 @@ final class DiscordMessageSynchronizer {
         void persist(List<String> messageIds) throws IOException;
 
         void blockCreate(List<String> knownMessageIds) throws IOException;
+
+        void beginCreate(List<String> knownMessageIds) throws IOException;
 
         void completeCreate(List<String> messageIds) throws IOException;
 

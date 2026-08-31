@@ -62,7 +62,12 @@ public final class DiscordSyncService {
 
                     @Override
                     public void blockCreate(List<String> knownMessageIds) throws IOException {
-                        markCreateOutcomeUnknown(knownMessageIds);
+                        markCreateOutcomeUnknown(knownMessageIds, false);
+                    }
+
+                    @Override
+                    public void beginCreate(List<String> knownMessageIds) throws IOException {
+                        markCreateOutcomeUnknown(knownMessageIds, true);
                     }
 
                     @Override
@@ -238,12 +243,12 @@ public final class DiscordSyncService {
         }
     }
 
-    private void markCreateOutcomeUnknown(List<String> knownMessageIds) throws IOException {
+    private void markCreateOutcomeUnknown(List<String> knownMessageIds, boolean inProgress) throws IOException {
         synchronized (lifecycleLock) {
             createOutcomeUnknown = true;
             messageIds = List.copyOf(knownMessageIds);
             messageStateStore.save(messageIds, true);
-            createInProgress = true;
+            createInProgress = inProgress;
         }
     }
 

@@ -153,6 +153,26 @@ class DiscordMessageSynchronizerTest {
         assertEquals(List.of("create:one", "create:one"), client.events);
     }
 
+    @Test
+    void deletionPersistenceFailureDoesNotRemainInProgress() {
+        FakeClient client = new FakeClient();
+        FakeState state = new FakeState();
+        state.failPersist = true;
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
+
+        assertThrows(SyncException.class, () -> synchronizer.synchronize(
+                ENDPOINT,
+                List.of("one"),
+                List.of("111111111111111111", "222222222222222222")
+        ));
+        assertEquals(true, state.createBlocked);
+        assertEquals(false, state.createInProgress);
+        assertEquals(List.of(
+                "edit:111111111111111111:one",
+                "delete:222222222222222222"
+        ), client.events);
+    }
+
     private static final class FakeState implements DiscordMessageSynchronizer.MessageState {
         private final List<List<String>> savedStates = new ArrayList<>();
         private final List<List<String>> blockedStates = new ArrayList<>();
@@ -177,6 +197,13 @@ class DiscordMessageSynchronizerTest {
 
         @Override
         public void blockCreate(List<String> knownMessageIds) throws IOException {
+            createBlocked = true;
+            createInProgress = false;
+            blockedStates.add(knownMessageIds);
+        }
+
+        @Override
+        public void beginCreate(List<String> knownMessageIds) throws IOException {
             if (failBlock) {
                 throw new IOException("simulated write-ahead failure");
             }
