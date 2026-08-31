@@ -68,6 +68,11 @@ public final class DiscordSyncService {
                     public void completeCreate(List<String> updatedMessageIds) throws IOException {
                         completeMessageCreate(updatedMessageIds);
                     }
+
+                    @Override
+                    public void cancelCreate(List<String> knownMessageIds) throws IOException {
+                        cancelMessageCreate(knownMessageIds);
+                    }
                 }
         );
     }
@@ -235,6 +240,15 @@ public final class DiscordSyncService {
         synchronized (lifecycleLock) {
             messageIds = List.copyOf(updatedMessageIds);
             messageStateStore.save(messageIds, false);
+            createOutcomeUnknown = false;
+        }
+    }
+
+    private void cancelMessageCreate(List<String> knownMessageIds) throws IOException {
+        synchronized (lifecycleLock) {
+            List<String> safeIds = List.copyOf(knownMessageIds);
+            messageStateStore.save(safeIds, false);
+            messageIds = safeIds;
             createOutcomeUnknown = false;
         }
     }

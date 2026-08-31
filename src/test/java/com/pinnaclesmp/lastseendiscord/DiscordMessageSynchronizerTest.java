@@ -132,9 +132,30 @@ class DiscordMessageSynchronizerTest {
         assertEquals(List.of(), client.events);
     }
 
+    @Test
+    void clearsCreateIntentBeforeRetryingDefinitiveRejection() throws Exception {
+        FakeClient client = new FakeClient("111111111111111111");
+        client.rejectedCreateNumber = 1;
+        FakeState state = new FakeState();
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
+
+        assertThrows(RetryableSyncException.class, () -> synchronizer.synchronize(
+                ENDPOINT, List.of("one"), List.of()
+        ));
+        assertEquals(false, state.createBlocked);
+        assertEquals(List.of(List.of()), state.cancelledStates);
+
+        assertEquals(
+                List.of("111111111111111111"),
+                synchronizer.synchronize(ENDPOINT, List.of("one"), List.of())
+        );
+        assertEquals(List.of("create:one", "create:one"), client.events);
+    }
+
     private static final class FakeState implements DiscordMessageSynchronizer.MessageState {
         private final List<List<String>> savedStates = new ArrayList<>();
         private final List<List<String>> blockedStates = new ArrayList<>();
+        private final List<List<String>> cancelledStates = new ArrayList<>();
         private boolean createBlocked;
         private boolean failPersist;
         private boolean failBlock;
@@ -170,6 +191,12 @@ class DiscordMessageSynchronizerTest {
             savedStates.add(messageIds);
             createBlocked = false;
         }
+
+        @Override
+        public void cancelCreate(List<String> knownMessageIds) {
+            cancelledStates.add(knownMessageIds);
+            createBlocked = false;
+        }
     }
 
     private static final class FakeClient implements DiscordMessageSynchronizer.MessageClient {
@@ -179,6 +206,7 @@ class DiscordMessageSynchronizerTest {
         private int createCount;
         private int failCreateNumber = -1;
         private int ambiguousCreateNumber = -1;
+        private int rejectedCreateNumber = -1;
 
         private FakeClient(String... ids) {
             createdIds.addAll(List.of(ids));
@@ -193,6 +221,9 @@ class DiscordMessageSynchronizerTest {
             }
             if (createCount == ambiguousCreateNumber) {
                 throw new AmbiguousCreateException(new IOException("simulated lost response"));
+            }
+            if (createCount == rejectedCreateNumber) {
+                throw new RetryableSyncException("simulated rate limit", 1_000L);
             }
             return createdIds.removeFirst();
         }

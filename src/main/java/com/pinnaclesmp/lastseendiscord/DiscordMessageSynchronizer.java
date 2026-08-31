@@ -72,7 +72,32 @@ final class DiscordMessageSynchronizer {
         }
 
         state.blockCreate(List.copyOf(knownMessageIds));
-        return client.create(endpoint, content);
+        try {
+            return client.create(endpoint, content);
+        } catch (AmbiguousCreateException ex) {
+            throw ex;
+        } catch (RetryableSyncException ex) {
+            if (!ex.deliveryMayBeAmbiguous()) {
+                cancelCreateIntent(knownMessageIds, ex);
+            }
+            throw ex;
+        } catch (SyncException ex) {
+            cancelCreateIntent(knownMessageIds, ex);
+            throw ex;
+        }
+    }
+
+    private void cancelCreateIntent(List<String> knownMessageIds, IOException originalFailure) throws IOException {
+        try {
+            state.cancelCreate(List.copyOf(knownMessageIds));
+        } catch (IOException cancellationFailure) {
+            cancellationFailure.addSuppressed(originalFailure);
+            throw new SyncException(
+                    "Discord rejected the create request, but its write-ahead intent could not be cleared. "
+                            + "Automatic creation remains paused until storage is fixed.",
+                    cancellationFailure
+            );
+        }
     }
 
     private void completeCreate(List<String> messageIds) throws IOException {
@@ -108,5 +133,7 @@ final class DiscordMessageSynchronizer {
         void blockCreate(List<String> knownMessageIds) throws IOException;
 
         void completeCreate(List<String> messageIds) throws IOException;
+
+        void cancelCreate(List<String> knownMessageIds) throws IOException;
     }
 }

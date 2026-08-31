@@ -26,6 +26,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Treat HTTP 5xx responses to message creation as ambiguous outcomes so the create request is never retried automatically.
 - Disable synchronization when legacy message IDs cannot be migrated into durable runtime state.
 - Persist a write-ahead creation intent before every Discord POST, preventing message creation when runtime state is unwritable.
+- Clear the write-ahead intent before retrying a create request that Discord definitively rejected, including HTTP 429 responses.
 
 ### Changed
 
