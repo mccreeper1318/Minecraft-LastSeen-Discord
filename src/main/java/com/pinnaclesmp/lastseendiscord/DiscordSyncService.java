@@ -239,15 +239,12 @@ public final class DiscordSyncService {
         }
 
         List<String> legacyIds = new ArrayList<>(plugin.config().getStringList("discord.message-ids"));
-        if (legacyIds.isEmpty()) {
-            String legacyId = plugin.config().getString("discord.message-id", "").trim();
-            if (!legacyId.isEmpty()) {
-                legacyIds.add(legacyId);
-            }
-        }
-
-        List<String> sanitized = MessageStateStore.sanitize(legacyIds);
-        if (sanitized.size() != legacyIds.size()) {
+        String legacyId = plugin.config().getString("discord.message-id", "");
+        List<String> sanitized = MessageStateStore.selectLegacyIds(legacyIds, legacyId);
+        List<String> sanitizedList = MessageStateStore.sanitize(legacyIds);
+        boolean ignoredConfiguredId = sanitizedList.size() != legacyIds.size()
+                || (sanitizedList.isEmpty() && !legacyId.trim().isEmpty() && sanitized.isEmpty());
+        if (ignoredConfiguredId) {
             plugin.getLogger().warning("Ignored invalid or duplicate Discord message IDs from config.yml.");
         }
         if (!sanitized.isEmpty()) {

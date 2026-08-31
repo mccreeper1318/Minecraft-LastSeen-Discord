@@ -96,6 +96,14 @@ final class MessageStateStore {
         return new ArrayList<>(unique);
     }
 
+    static List<String> selectLegacyIds(List<String> configuredIds, String configuredId) {
+        List<String> sanitized = sanitize(configuredIds);
+        if (!sanitized.isEmpty()) {
+            return sanitized;
+        }
+        return sanitize(List.of(configuredId == null ? "" : configuredId));
+    }
+
     record State(List<String> messageIds, boolean createOutcomeUnknown) {
     }
 

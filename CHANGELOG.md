@@ -22,6 +22,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Treat a successful create response without a valid message ID as ambiguous and pause further creation.
 - Retain known message IDs in memory and pause creation if runtime-state persistence fails.
 - Disable synchronization when an existing `message-state.json` cannot be read instead of falling back to stale legacy state.
+- Preserve the valid single-message legacy ID when the configured legacy ID list contains only blank or invalid entries.
 
 ### Changed
 

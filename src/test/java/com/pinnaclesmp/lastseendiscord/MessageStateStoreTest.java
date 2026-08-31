@@ -60,4 +60,26 @@ class MessageStateStoreTest {
         assertEquals(List.of("111111111111111111"), state.messageIds());
         assertEquals(true, state.createOutcomeUnknown());
     }
+
+    @Test
+    void fallsBackToSingleLegacyIdWhenConfiguredListSanitizesToEmpty() {
+        assertEquals(
+                List.of("111111111111111111"),
+                MessageStateStore.selectLegacyIds(
+                        List.of("", "   ", "not-an-id"),
+                        "111111111111111111"
+                )
+        );
+    }
+
+    @Test
+    void prefersValidConfiguredListOverSingleLegacyId() {
+        assertEquals(
+                List.of("222222222222222222"),
+                MessageStateStore.selectLegacyIds(
+                        List.of("222222222222222222"),
+                        "111111111111111111"
+                )
+        );
+    }
 }
