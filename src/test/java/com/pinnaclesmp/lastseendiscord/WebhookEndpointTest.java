@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,6 +23,27 @@ class WebhookEndpointTest {
                 "https://discord.com/api/webhooks/123456789012345678/token_value/messages/987654321012345678?thread_id=999&wait=false",
                 endpoint.messageUri("987654321012345678").toString()
         );
+    }
+
+    @Test
+    void webhookStateIdentityUsesOnlyTheNonSecretWebhookId() throws Exception {
+        String firstToken = "first_secret_token";
+        String secondToken = "second_secret_token";
+        WebhookEndpoint first = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/123456789012345678/" + firstToken
+        );
+        WebhookEndpoint rotatedToken = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/123456789012345678/" + secondToken
+        );
+        WebhookEndpoint differentWebhook = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/987654321012345678/other_token"
+        );
+
+        assertEquals("discord-webhook:123456789012345678", first.stateIdentity());
+        assertEquals(first.stateIdentity(), rotatedToken.stateIdentity());
+        assertNotEquals(first.stateIdentity(), differentWebhook.stateIdentity());
+        assertFalse(first.stateIdentity().contains(firstToken));
+        assertFalse(rotatedToken.stateIdentity().contains(secondToken));
     }
 
     @Test

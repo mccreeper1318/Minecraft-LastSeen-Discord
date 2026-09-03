@@ -49,9 +49,16 @@ final class DiscordMessageSynchronizer {
         try {
             state.persist(snapshot);
         } catch (IOException persistenceFailure) {
+            if (persistenceFailure instanceof StaleConfigurationException staleConfiguration) {
+                throw staleConfiguration;
+            }
             try {
                 state.blockCreate(snapshot);
             } catch (IOException blockFailure) {
+                if (blockFailure instanceof StaleConfigurationException staleConfiguration) {
+                    staleConfiguration.addSuppressed(persistenceFailure);
+                    throw staleConfiguration;
+                }
                 persistenceFailure.addSuppressed(blockFailure);
             }
             throw new SyncException(
@@ -97,6 +104,10 @@ final class DiscordMessageSynchronizer {
         try {
             state.cancelCreate(List.copyOf(knownMessageIds));
         } catch (IOException cancellationFailure) {
+            if (cancellationFailure instanceof StaleConfigurationException staleConfiguration) {
+                staleConfiguration.addSuppressed(originalFailure);
+                throw staleConfiguration;
+            }
             cancellationFailure.addSuppressed(originalFailure);
             throw new SyncException(
                     "Discord rejected the create request, but its write-ahead intent could not be cleared. "
@@ -110,6 +121,9 @@ final class DiscordMessageSynchronizer {
         try {
             state.completeCreate(List.copyOf(messageIds));
         } catch (IOException ex) {
+            if (ex instanceof StaleConfigurationException staleConfiguration) {
+                throw staleConfiguration;
+            }
             throw new SyncException(
                     "The Discord message was created, but its ID could not be committed. Automatic message "
                             + "creation remains paused until storage is fixed and recovery is confirmed.",
@@ -132,7 +146,7 @@ final class DiscordMessageSynchronizer {
     }
 
     interface MessageState {
-        boolean isCreateBlocked();
+        boolean isCreateBlocked() throws IOException;
 
         void persist(List<String> messageIds) throws IOException;
 
