@@ -76,6 +76,28 @@ class MessageStateStoreTest {
     }
 
     @Test
+    void rejectsMalformedOrDuplicateIdsWhenLoadingState() throws Exception {
+        Path stateFile = temporaryDirectory.resolve("message-state.json");
+        MessageStateStore store = new MessageStateStore(stateFile);
+
+        Files.writeString(
+                stateFile,
+                "{\"version\":3,\"messageIds\":[\"111111111111111111\",\"111111111111111111\"],"
+                        + "\"createOutcomeUnknown\":false,\"webhookIdentity\":\"" + WEBHOOK_IDENTITY + "\"}\n",
+                StandardCharsets.UTF_8
+        );
+        assertThrows(IOException.class, store::load);
+
+        Files.writeString(
+                stateFile,
+                "{\"version\":3,\"messageIds\":[\"not-an-id\"],\"createOutcomeUnknown\":false,"
+                        + "\"webhookIdentity\":\"" + WEBHOOK_IDENTITY + "\"}\n",
+                StandardCharsets.UTF_8
+        );
+        assertThrows(IOException.class, store::load);
+    }
+
+    @Test
     void persistsAmbiguousCreateBlockAcrossReloads() throws Exception {
         Path stateFile = temporaryDirectory.resolve("message-state.json");
         MessageStateStore store = new MessageStateStore(stateFile);
