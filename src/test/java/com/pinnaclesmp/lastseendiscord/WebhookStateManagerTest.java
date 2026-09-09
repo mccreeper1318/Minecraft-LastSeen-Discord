@@ -103,4 +103,63 @@ class WebhookStateManagerTest {
         );
         assertEquals(List.of("333333333333333333"), manager.snapshot().messageIds());
     }
+
+    @Test
+    void shutdownDuringCreateRejectsLateRequestCompletion() throws Exception {
+        MessageStateStore store = new MessageStateStore(temporaryDirectory.resolve("message-state.json"));
+        store.save(List.of(), false, OLD_IDENTITY);
+        WebhookStateManager manager = new WebhookStateManager(store, store.load());
+        manager.advanceConfiguration(OLD_IDENTITY, true);
+
+        WebhookStateManager.Snapshot activeSnapshot = manager.snapshot();
+        DiscordMessageSynchronizer.MessageState activeState = manager.bind(
+                activeSnapshot.generation(),
+                activeSnapshot.webhookIdentity()
+        );
+        activeState.beginCreate(List.of());
+
+        manager.shutdown();
+        assertTrue(manager.snapshot().stopped());
+
+        assertThrows(
+                StaleConfigurationException.class,
+                () -> activeState.completeCreate(List.of("333333333333333333"))
+        );
+        activeState.finishCreateAttempt();
+
+        WebhookStateManager.Snapshot current = manager.snapshot();
+        assertEquals(List.of(), current.messageIds());
+        assertTrue(current.createOutcomeUnknown());
+        assertTrue(current.createInProgress());
+
+        MessageStateStore.State persisted = store.load();
+        assertEquals(List.of(), persisted.messageIds());
+        assertTrue(persisted.createOutcomeUnknown());
+    }
+
+    @Test
+    void shutdownRejectsLateFinalSyncCommitAndAdministrativeMutation() throws Exception {
+        MessageStateStore store = new MessageStateStore(temporaryDirectory.resolve("message-state.json"));
+        store.save(List.of("333333333333333333"), false, OLD_IDENTITY);
+        WebhookStateManager manager = new WebhookStateManager(store, store.load());
+        manager.advanceConfiguration(OLD_IDENTITY, true);
+        WebhookStateManager.Snapshot activeSnapshot = manager.snapshot();
+
+        manager.shutdown();
+
+        assertThrows(
+                StaleConfigurationException.class,
+                () -> manager.commitSyncResult(
+                        activeSnapshot.generation(),
+                        activeSnapshot.webhookIdentity(),
+                        List.of("444444444444444444")
+                )
+        );
+        assertThrows(
+                StaleConfigurationException.class,
+                () -> manager.advanceConfiguration(NEW_IDENTITY, true)
+        );
+        assertThrows(StaleConfigurationException.class, manager::recoverAmbiguousCreate);
+        assertEquals(List.of("333333333333333333"), manager.snapshot().messageIds());
+    }
 }
