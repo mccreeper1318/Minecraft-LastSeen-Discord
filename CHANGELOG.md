@@ -7,6 +7,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 ### Fixed
 
 - Build threaded Discord webhook message URLs from parsed URI components so edit and delete endpoints place `/messages/{id}` before existing query parameters, while preserving query values and handling trailing slashes correctly.
+- Shut synchronization down cleanly by invalidating in-flight state mutations, dropping queued and retry work, cancelling delayed retries, and force-stopping the webhook HTTP client so late completions cannot write stale runtime state.
 
 ### Changed
 
