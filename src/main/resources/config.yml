@@ -2,6 +2,7 @@ discord:
   webhook-url: "PUT_DISCORD_WEBHOOK_URL_HERE"
   # Deprecated runtime state from versions through 1.1.0. Version 1.1.1 migrates
   # these IDs to message-state.json and maintains them there atomically.
+  # Malformed or duplicate IDs are ignored during legacy migration.
   message-ids: []
   # Older single-message value retained only for automatic migration.
   message-id: ""
@@ -11,12 +12,15 @@ discord:
   include-last-seen-date: false
 
 activity:
+  # Values below 1 are normalized to 1 day.
   inactive-after-days: 30
+  # Valid values are LAST_SEEN and LAST_LOGIN. Invalid values use LAST_SEEN.
   # LAST_SEEN is recommended because it treats online players as active now.
   # Use LAST_LOGIN if you specifically want the login timestamp instead.
   timestamp-source: "LAST_SEEN"
 
 updates:
+  # Valid range is 1-525600 minutes (up to one year). Out-of-range values are clamped.
   interval-minutes: 1440
   update-on-join: true
   update-on-quit: true
