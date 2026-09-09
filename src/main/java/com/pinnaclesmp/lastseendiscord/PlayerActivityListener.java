@@ -24,23 +24,21 @@ public final class PlayerActivityListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        if (plugin.config().getBoolean("updates.update-on-join", true)) {
-            requestActivitySync("player join: " + event.getPlayer().getName());
+        ValidatedConfiguration configuration = plugin.validatedConfiguration();
+        if (configuration.updateOnJoin()) {
+            requestActivitySync("player join: " + event.getPlayer().getName(), configuration);
         }
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        if (plugin.config().getBoolean("updates.update-on-quit", true)) {
-            requestActivitySync("player quit: " + event.getPlayer().getName());
+        ValidatedConfiguration configuration = plugin.validatedConfiguration();
+        if (configuration.updateOnQuit()) {
+            requestActivitySync("player quit: " + event.getPlayer().getName(), configuration);
         }
     }
 
-    private void requestActivitySync(String reason) {
-        int debounceSeconds = plugin.config().getInt(
-                "updates.event-debounce-seconds",
-                EventSyncDebouncer.DEFAULT_DEBOUNCE_SECONDS
-        );
-        debouncer.request(reason, debounceSeconds);
+    private void requestActivitySync(String reason, ValidatedConfiguration configuration) {
+        debouncer.request(reason, configuration.eventDebounceSeconds());
     }
 }
