@@ -34,12 +34,28 @@ class SyncRequestQueueTest {
     }
 
     @Test
-    void stoppedQueueRejectsFutureWork() {
+    void shutdownDropsQueuedSyncAndRejectsFutureWork() {
         SyncRequestQueue queue = new SyncRequestQueue();
         queue.request("first");
         queue.stop();
 
+        assertTrue(queue.isStopped());
         assertNull(queue.poll());
         assertFalse(queue.request("late"));
+    }
+
+    @Test
+    void shutdownDropsAutomaticRetryWaitingInBackoff() {
+        SyncRequestQueue queue = new SyncRequestQueue();
+        queue.request("first");
+        assertEquals("first", queue.poll().reason());
+        queue.requeue("automatic retry");
+
+        queue.stop();
+
+        assertTrue(queue.isStopped());
+        assertNull(queue.poll());
+        queue.requeue("late automatic retry");
+        assertNull(queue.poll());
     }
 }
