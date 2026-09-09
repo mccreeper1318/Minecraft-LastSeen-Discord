@@ -21,3 +21,6 @@ updates:
   update-on-join: true
   update-on-quit: true
   update-on-enable: true
+  # Join/quit sync requests are coalesced until this many seconds pass without another
+  # player activity event. Values are clamped to 0-60; 0 disables event debouncing.
+  event-debounce-seconds: 5
