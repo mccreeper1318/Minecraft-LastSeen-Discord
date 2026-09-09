@@ -25,7 +25,7 @@ Treat the Discord webhook URL like a password. Anyone who has it can post throug
 | Command | Purpose |
 |---|---|
 | `/lsd sync` | Queue an immediate Discord update, bypassing the join/quit debounce window. |
-| `/lsd reload` | Reload `config.yml`, restart the automatic schedule, and queue an update. |
+| `/lsd reload` | Reload and validate `config.yml`, restart the automatic schedule, and queue an update. |
 | `/lsd recover-create confirm` | Resume message creation after an ambiguous Discord response. Check the channel and remove any untracked duplicate page before confirming. |
 
 Both commands require `lastseendiscord.admin`, which defaults to server operators. `/lastseendiscord` is the full command name.
@@ -34,18 +34,20 @@ Both commands require `lastseendiscord.admin`, which defaults to server operator
 
 | Setting | Default | Purpose |
 |---|---:|---|
-| `discord.webhook-url` | placeholder | Discord webhook used for the activity messages. Official HTTPS Discord webhook URLs are required. |
+| `discord.webhook-url` | placeholder | Discord webhook used for the activity messages. Official HTTPS Discord webhook URLs are required. Invalid values disable synchronization until corrected. |
 | `discord.header` | `**Server Activity Status**` | Optional text placed above the list. |
 | `discord.include-last-seen-date` | `false` | Adds a `YYYY-MM-DD` activity date to each player. |
-| `activity.inactive-after-days` | `30` | Number of days without activity before a player is marked inactive. Minimum effective value is one day. |
-| `activity.timestamp-source` | `LAST_SEEN` | Uses `LAST_SEEN` or `LAST_LOGIN`, with the other timestamp as a compatibility fallback. |
-| `updates.interval-minutes` | `1440` | Automatic synchronization interval in minutes. Minimum effective value is one minute. |
+| `activity.inactive-after-days` | `30` | Number of days without activity before a player is marked inactive. Values below `1` are normalized to `1`. |
+| `activity.timestamp-source` | `LAST_SEEN` | Uses `LAST_SEEN` or `LAST_LOGIN`, with the other timestamp as a compatibility fallback. Invalid values use `LAST_SEEN`. |
+| `updates.interval-minutes` | `1440` | Automatic synchronization interval. Valid range is `1`-`525600` minutes; out-of-range values are clamped. |
 | `updates.update-on-join` | `true` | Requests an update when a player joins. Join/quit requests are debounced together. |
 | `updates.update-on-quit` | `true` | Requests an update when a player leaves. Join/quit requests are debounced together. |
 | `updates.update-on-enable` | `true` | Queues an update when the plugin starts. |
 | `updates.event-debounce-seconds` | `5` | Trailing-edge debounce window for join/quit updates. Valid range is `0`-`60` seconds; values are clamped to that range and `0` disables debouncing. |
 
-The deprecated `discord.message-ids` and `discord.message-id` values are retained only to migrate installations upgrading from version 1.1.0 or earlier. Version 1.1.1 stores generated message IDs in `message-state.json`; do not edit that file while the server is running.
+Every supported setting is validated at startup and again by `/lsd reload`. Invalid scalar values produce field-specific warnings and use a safe default or boundary value where possible. Webhook validation messages never include the configured webhook URL or token.
+
+The deprecated `discord.message-ids` and `discord.message-id` values are retained only to migrate installations upgrading from version 1.1.0 or earlier. Malformed or duplicate legacy IDs are ignored and reported during validation. Version 1.1.1 and later store generated message IDs in `message-state.json`; malformed or duplicate IDs in that runtime-state file cause synchronization to fail closed instead of entering active state. Do not edit `message-state.json` while the server is running.
 
 ## How synchronization behaves
 
@@ -69,12 +71,13 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 4. Start the server and confirm that `message-state.json` was created if the plugin already managed Discord messages.
 5. Run `/lsd sync` and verify that the existing Discord messages update instead of being duplicated.
 
-Existing configuration keys remain compatible with version 1.1.1. Newer options such as `updates.event-debounce-seconds` use their documented defaults when absent from an older configuration file.
+Existing configuration keys remain compatible with version 1.1.1. Newer options such as `updates.event-debounce-seconds` use their documented defaults when absent from an older configuration file. The legacy `discord.include-last-login-date` setting is still recognized when `discord.include-last-seen-date` is not explicitly set.
 
 ## Troubleshooting
 
 - **The plugin says the webhook is not configured:** Replace the placeholder with the complete webhook URL, save the file, and run `/lsd reload`.
-- **The plugin rejects the webhook URL:** Create or copy a standard HTTPS webhook URL from Discord. Proxy URLs and non-Discord hosts are not accepted.
+- **The plugin rejects the webhook URL:** Create or copy a standard HTTPS webhook URL from Discord. Proxy URLs and non-Discord hosts are not accepted. Validation errors intentionally do not print the supplied webhook URL or token.
+- **A configuration value is being normalized:** Read the field-specific warning in the server log, correct the value in `config.yml`, and run `/lsd reload`. Scheduling and debounce values are clamped to their documented safe ranges.
 - **The list is temporarily stale:** Check the server log for a sanitized HTTP status or retry notice. Temporary failures retry automatically, and `/lsd sync` can queue another update.
 - **Join/quit updates feel delayed:** `updates.event-debounce-seconds` intentionally waits for player activity to settle before syncing. Lower the value or set it to `0` to disable event debouncing.
 - **A Discord page was deleted:** Run `/lsd sync`; the missing page is recreated and its new ID is saved automatically.
