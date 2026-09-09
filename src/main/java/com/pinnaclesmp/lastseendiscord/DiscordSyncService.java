@@ -2,7 +2,6 @@ package com.pinnaclesmp.lastseendiscord;
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
@@ -10,8 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -32,15 +29,15 @@ public final class DiscordSyncService {
         Path statePath = plugin.getDataFolder().toPath().resolve("message-state.json");
         this.messageStateStore = new MessageStateStore(statePath);
 
-        ConfiguredWebhookIdentity configuredIdentity = configuredWebhookIdentity();
-        InitialMessageState initialState = loadInitialMessageState(statePath, configuredIdentity);
+        ValidatedConfiguration configuration = plugin.validatedConfiguration();
+        InitialMessageState initialState = loadInitialMessageState(statePath, configuration);
         this.webhookStateManager = new WebhookStateManager(messageStateStore, initialState.state());
         this.runtimeStateUsable = initialState.usable();
         if (runtimeStateUsable) {
             try {
                 boolean changed = webhookStateManager.advanceConfiguration(
-                        configuredIdentity.identity(),
-                        configuredIdentity.rebindState()
+                        configuration.webhookIdentity(),
+                        configuration.webhookRebindState()
                 );
                 if (changed && Files.exists(statePath)) {
                     plugin.getLogger().info("Reset Discord message state for the configured webhook destination.");
@@ -70,11 +67,11 @@ public final class DiscordSyncService {
     }
 
     public void reloadConfiguration() throws IOException {
-        ConfiguredWebhookIdentity configuredIdentity = configuredWebhookIdentity();
+        ValidatedConfiguration configuration = plugin.validatedConfiguration();
         try {
             boolean changed = webhookStateManager.advanceConfiguration(
-                    configuredIdentity.identity(),
-                    configuredIdentity.rebindState()
+                    configuration.webhookIdentity(),
+                    configuration.webhookRebindState()
             );
             if (changed) {
                 plugin.getLogger().info("Discord webhook destination changed; cleared tracked message IDs for a clean lifecycle.");
@@ -232,34 +229,18 @@ public final class DiscordSyncService {
             return CapturedSyncSnapshot.unconfigured("Skipping Discord sync: plugin shutdown is in progress.");
         }
 
-        FileConfiguration config = plugin.config();
-        String configuredUrl = config.getString("discord.webhook-url", "").trim();
-        if (isWebhookUnconfigured(configuredUrl)) {
-            return CapturedSyncSnapshot.unconfigured("Skipping Discord sync: discord.webhook-url is not configured.");
+        ValidatedConfiguration configuration = plugin.validatedConfiguration();
+        WebhookEndpoint endpoint = configuration.webhookEndpoint();
+        if (endpoint == null) {
+            return CapturedSyncSnapshot.unconfigured(configuration.webhookConfigurationMessage());
         }
 
-        final WebhookEndpoint endpoint;
-        try {
-            endpoint = WebhookEndpoint.parse(configuredUrl);
-        } catch (SyncException ex) {
-            return CapturedSyncSnapshot.unconfigured("Skipping Discord sync: " + ex.getMessage());
-        }
-
-        if (!Objects.equals(stateSnapshot.webhookIdentity(), endpoint.stateIdentity())) {
+        if (!configuration.webhookIdentity().equals(stateSnapshot.webhookIdentity())) {
             return CapturedSyncSnapshot.unconfigured("Skipping Discord sync: webhook runtime state is not bound to the "
                     + "configured destination. Run /lsd reload or restart the server after fixing state storage.");
         }
 
-        int inactiveAfterDays = Math.max(1, config.getInt("activity.inactive-after-days", 30));
-        boolean includeActivityDate = config.contains("discord.include-last-seen-date")
-                ? config.getBoolean("discord.include-last-seen-date", false)
-                : config.getBoolean("discord.include-last-login-date", false);
-        TimestampSource timestampSource = TimestampSource.fromConfig(
-                config.getString("activity.timestamp-source", "LAST_SEEN")
-        );
-        String header = config.getString("discord.header", "").trim();
         long capturedAtMillis = System.currentTimeMillis();
-
         List<DiscordActivityMessageBuilder.PlayerActivity> players = new ArrayList<>();
         for (OfflinePlayer offlinePlayer : Bukkit.getOfflinePlayers()) {
             if (!offlinePlayer.hasPlayedBefore()) {
@@ -271,7 +252,7 @@ public final class DiscordSyncService {
                 continue;
             }
 
-            long activityTime = timestampSource.resolve(offlinePlayer);
+            long activityTime = resolveActivityTime(offlinePlayer, configuration.timestampSource());
             if (activityTime <= 0L) {
                 continue;
             }
@@ -287,36 +268,29 @@ public final class DiscordSyncService {
                 stateSnapshot.webhookIdentity(),
                 stateSnapshot.messageIds(),
                 new DiscordActivityMessageBuilder.Settings(
-                        inactiveAfterDays,
-                        includeActivityDate,
-                        timestampSource.displayName(),
-                        header
+                        configuration.inactiveAfterDays(),
+                        configuration.includeActivityDate(),
+                        configuration.timestampSource().displayName(),
+                        configuration.header()
                 ),
                 List.copyOf(players),
                 capturedAtMillis
         );
     }
 
-    private ConfiguredWebhookIdentity configuredWebhookIdentity() {
-        String configuredUrl = plugin.config().getString("discord.webhook-url", "").trim();
-        if (isWebhookUnconfigured(configuredUrl)) {
-            return new ConfiguredWebhookIdentity(null, true);
-        }
-        try {
-            return new ConfiguredWebhookIdentity(WebhookEndpoint.parse(configuredUrl).stateIdentity(), true);
-        } catch (SyncException ex) {
-            return new ConfiguredWebhookIdentity(null, false);
-        }
-    }
-
-    private boolean isWebhookUnconfigured(String configuredUrl) {
-        return configuredUrl.isEmpty() || configuredUrl.equals("PUT_DISCORD_WEBHOOK_URL_HERE");
-    }
-
-    private InitialMessageState loadInitialMessageState(
-            Path statePath,
-            ConfiguredWebhookIdentity configuredIdentity
+    private long resolveActivityTime(
+            OfflinePlayer offlinePlayer,
+            ValidatedConfiguration.TimestampSource timestampSource
     ) {
+        if (timestampSource == ValidatedConfiguration.TimestampSource.LAST_LOGIN) {
+            long lastLogin = offlinePlayer.getLastLogin();
+            return lastLogin > 0L ? lastLogin : offlinePlayer.getLastSeen();
+        }
+        long lastSeen = offlinePlayer.getLastSeen();
+        return lastSeen > 0L ? lastSeen : offlinePlayer.getLastLogin();
+    }
+
+    private InitialMessageState loadInitialMessageState(Path statePath, ValidatedConfiguration configuration) {
         if (Files.exists(statePath)) {
             try {
                 return new InitialMessageState(messageStateStore.load(), true);
@@ -325,47 +299,35 @@ public final class DiscordSyncService {
                         + "to prevent duplicate messages. Repair or remove the file after reconciling the Discord "
                         + "messages, then restart the server.");
                 return new InitialMessageState(
-                        new MessageStateStore.State(List.of(), true, configuredIdentity.identity()),
+                        new MessageStateStore.State(List.of(), true, configuration.webhookIdentity()),
                         false
                 );
             }
         }
 
-        List<String> legacyIds = new ArrayList<>(plugin.config().getStringList("discord.message-ids"));
-        String legacyId = plugin.config().getString("discord.message-id", "");
-        List<String> sanitized = MessageStateStore.selectLegacyIds(legacyIds, legacyId);
-        List<String> sanitizedList = MessageStateStore.sanitize(legacyIds);
-        boolean ignoredConfiguredId = sanitizedList.size() != legacyIds.size()
-                || (sanitizedList.isEmpty() && !legacyId.trim().isEmpty() && sanitized.isEmpty());
-        if (ignoredConfiguredId) {
-            plugin.getLogger().warning("Ignored invalid or duplicate Discord message IDs from config.yml.");
-        }
-
-        String migrationIdentity = configuredIdentity.rebindState() ? configuredIdentity.identity() : null;
-        if (!sanitized.isEmpty() && migrationIdentity != null) {
+        List<String> legacyIds = configuration.legacyMessageIds();
+        String migrationIdentity = configuration.webhookRebindState() ? configuration.webhookIdentity() : null;
+        if (!legacyIds.isEmpty() && migrationIdentity != null) {
             try {
-                messageStateStore.save(sanitized, false, migrationIdentity);
+                messageStateStore.save(legacyIds, false, migrationIdentity);
                 plugin.getLogger().info("Migrated Discord message IDs to message-state.json.");
             } catch (IOException ex) {
                 plugin.getLogger().severe("Could not migrate Discord message IDs to message-state.json. Discord "
                         + "synchronization is disabled to prevent untracked messages. Fix state storage, then "
                         + "restart the server.");
                 return new InitialMessageState(
-                        new MessageStateStore.State(List.copyOf(sanitized), true, migrationIdentity),
+                        new MessageStateStore.State(List.copyOf(legacyIds), true, migrationIdentity),
                         false
                 );
             }
         }
         return new InitialMessageState(
-                new MessageStateStore.State(List.copyOf(sanitized), false, migrationIdentity),
+                new MessageStateStore.State(List.copyOf(legacyIds), false, migrationIdentity),
                 true
         );
     }
 
     private record InitialMessageState(MessageStateStore.State state, boolean usable) {
-    }
-
-    private record ConfiguredWebhookIdentity(String identity, boolean rebindState) {
     }
 
     private void logSafeFailure(String reason, Exception exception) {
@@ -378,46 +340,6 @@ public final class DiscordSyncService {
             safeMessage = "An unexpected " + exception.getClass().getSimpleName() + " occurred.";
         }
         plugin.getLogger().severe("Discord sync failed (" + reason + "): " + safeMessage);
-    }
-
-    private enum TimestampSource {
-        LAST_SEEN("last seen") {
-            @Override
-            long resolve(OfflinePlayer offlinePlayer) {
-                long lastSeen = offlinePlayer.getLastSeen();
-                return lastSeen > 0L ? lastSeen : offlinePlayer.getLastLogin();
-            }
-        },
-        LAST_LOGIN("last login") {
-            @Override
-            long resolve(OfflinePlayer offlinePlayer) {
-                long lastLogin = offlinePlayer.getLastLogin();
-                return lastLogin > 0L ? lastLogin : offlinePlayer.getLastSeen();
-            }
-        };
-
-        private final String displayName;
-
-        TimestampSource(String displayName) {
-            this.displayName = displayName;
-        }
-
-        static TimestampSource fromConfig(String value) {
-            if (value == null || value.isBlank()) {
-                return LAST_SEEN;
-            }
-            try {
-                return TimestampSource.valueOf(value.trim().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException ex) {
-                return LAST_SEEN;
-            }
-        }
-
-        String displayName() {
-            return displayName;
-        }
-
-        abstract long resolve(OfflinePlayer offlinePlayer);
     }
 
     private record CapturedSyncSnapshot(
