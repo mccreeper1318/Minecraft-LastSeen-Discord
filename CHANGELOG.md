@@ -13,6 +13,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 ### Changed
 
 - Configure Dependabot to keep Gradle and GitHub Actions dependencies current on `dev`, while leaving the Paper API pinned for manual updates.
+- Debounce join and quit synchronization requests with a configurable trailing-edge window so bursts of player activity produce one final update. `updates.event-debounce-seconds` defaults to 5 seconds, is clamped to 0-60 seconds, and can be set to 0 to disable debouncing; `/lsd sync` remains immediate.
 
 ### Dependencies
 
