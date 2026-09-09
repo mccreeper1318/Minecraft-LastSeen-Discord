@@ -10,6 +10,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Shut synchronization down cleanly by invalidating in-flight state mutations, dropping queued and retry work, cancelling delayed retries, and force-stopping the webhook HTTP client so late completions cannot write stale runtime state.
 - Move player-list sorting, activity classification, Discord formatting, escaping, and pagination off the Minecraft server thread. Synchronization now captures only Bukkit-owned player/configuration data synchronously into immutable records before rendering and sending asynchronously.
 - Keep normal edit-only synchronizations write-free when managed Discord message IDs are unchanged. Generated message state remains outside `config.yml` in atomic `message-state.json`, preventing synchronization from overwriting unrelated administrator configuration edits.
+- Centralize startup and reload validation for webhook, activity, scheduling, debounce, toggle, header, and legacy message-ID settings. Invalid scalar values now produce field-specific safe warnings, scheduling values are bounded before tick conversion, invalid timestamp sources fall back to `LAST_SEEN`, and malformed or duplicate stored IDs cannot enter active state.
 
 ### Changed
 
@@ -19,6 +20,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 ### Added
 
 - Add deterministic loopback HTTP integration tests for the real webhook client, covering request construction, top-level message-ID parsing, Discord unknown-message recovery, rate-limit delays, and controllable delayed responses without contacting Discord.
+- Add configuration boundary and migration regression tests covering legacy settings, scheduling limits, invalid timestamp values, webhook-secret redaction, and malformed or duplicate message IDs.
 
 ### Dependencies
 
