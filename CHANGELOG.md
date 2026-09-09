@@ -18,6 +18,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ### Dependencies
 
+- Update `io.papermc.paper:paper-api` to `26.2.build.121-stable`
 - Update `com.google.code.gson:gson` to `2.14.0`
 - Update `org.junit:junit-bom` to `6.1.3`
 - Update `gradle-wrapper` to `9.7.1`
