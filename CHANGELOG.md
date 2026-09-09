@@ -8,6 +8,16 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 - Configure Dependabot to keep Gradle and GitHub Actions dependencies current on `dev`, while leaving the Paper API pinned for manual updates.
 
+### Dependencies
+
+- Update `com.google.code.gson:gson` to `2.14.0`
+- Update `org.junit:junit-bom` to `6.1.3`
+- Update `gradle-wrapper` to `9.7.1`
+- Update `actions/checkout` to `7.0.1`
+- Update `actions/setup-java` to `6.0.0`
+- Update `gradle/actions/setup-gradle` to `6.3.0`
+- Update `actions/upload-artifact` to `7.0.1`
+
 ## [1.1.1]
 
 ### Security
