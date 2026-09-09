@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 
 final class WebhookEndpoint {
+    private static final String STATE_IDENTITY_PREFIX = "discord-webhook:";
     private static final Set<String> DISCORD_HOSTS = Set.of(
             "discord.com",
             "www.discord.com",
@@ -19,9 +20,11 @@ final class WebhookEndpoint {
     );
 
     private final URI baseUri;
+    private final String webhookId;
 
-    private WebhookEndpoint(URI baseUri) {
+    private WebhookEndpoint(URI baseUri, String webhookId) {
         this.baseUri = baseUri;
+        this.webhookId = webhookId;
     }
 
     static WebhookEndpoint parse(String configuredUrl) throws SyncException {
@@ -57,7 +60,7 @@ final class WebhookEndpoint {
                     path,
                     uri.getQuery(),
                     null
-            ));
+            ), webhookId);
         } catch (URISyntaxException | IllegalArgumentException ex) {
             throw invalidWebhook();
         }
@@ -82,6 +85,14 @@ final class WebhookEndpoint {
             throw new SyncException("A stored Discord message ID is invalid.");
         }
         return rebuild(baseUri.getPath() + "/messages/" + messageId, baseUri.getQuery());
+    }
+
+    String stateIdentity() {
+        return STATE_IDENTITY_PREFIX + webhookId;
+    }
+
+    static boolean isValidStateIdentity(String identity) {
+        return identity != null && identity.matches(STATE_IDENTITY_PREFIX + "[0-9]{1,20}");
     }
 
     static boolean isValidMessageId(String messageId) {

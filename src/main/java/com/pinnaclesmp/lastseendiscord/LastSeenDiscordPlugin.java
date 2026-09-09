@@ -77,6 +77,15 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
 
         if (args[0].equalsIgnoreCase("reload")) {
             reloadConfig();
+            try {
+                discordSyncService.reloadConfiguration();
+            } catch (IOException ex) {
+                restartScheduler();
+                sender.sendMessage("§cConfig reloaded, but Discord runtime state could not be rebound. "
+                        + "Synchronization is disabled until state storage is fixed and the server is restarted.");
+                getLogger().severe("Could not rebind Discord message state after config reload.");
+                return true;
+            }
             restartScheduler();
             sender.sendMessage("§aLastSeenDiscord config reloaded.");
             discordSyncService.requestSync("manual reload");

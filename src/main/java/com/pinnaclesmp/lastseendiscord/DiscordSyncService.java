@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -26,13 +27,11 @@ public final class DiscordSyncService {
     private final LastSeenDiscordPlugin plugin;
     private final SyncRequestQueue requestQueue = new SyncRequestQueue();
     private final MessageStateStore messageStateStore;
-    private final DiscordMessageSynchronizer messageSynchronizer;
+    private final WebhookStateManager webhookStateManager;
+    private final DiscordWebhookClient webhookClient;
     private final Object lifecycleLock = new Object();
 
-    private volatile List<String> messageIds;
-    private volatile boolean createOutcomeUnknown;
-    private volatile boolean createInProgress;
-    private final boolean runtimeStateUsable;
+    private volatile boolean runtimeStateUsable;
     private BukkitTask retryTask;
     private int retryAttempt;
 
@@ -40,52 +39,29 @@ public final class DiscordSyncService {
         this.plugin = plugin;
         Path statePath = plugin.getDataFolder().toPath().resolve("message-state.json");
         this.messageStateStore = new MessageStateStore(statePath);
-        InitialMessageState initialState = loadInitialMessageState(statePath);
-        this.messageIds = initialState.state().messageIds();
-        this.createOutcomeUnknown = initialState.state().createOutcomeUnknown();
+
+        ConfiguredWebhookIdentity configuredIdentity = configuredWebhookIdentity();
+        InitialMessageState initialState = loadInitialMessageState(statePath, configuredIdentity);
+        this.webhookStateManager = new WebhookStateManager(messageStateStore, initialState.state());
         this.runtimeStateUsable = initialState.usable();
+        if (runtimeStateUsable) {
+            try {
+                boolean changed = webhookStateManager.advanceConfiguration(
+                        configuredIdentity.identity(),
+                        configuredIdentity.rebindState()
+                );
+                if (changed && Files.exists(statePath)) {
+                    plugin.getLogger().info("Reset Discord message state for the configured webhook destination.");
+                }
+            } catch (IOException ex) {
+                runtimeStateUsable = false;
+                plugin.getLogger().severe("Could not bind message-state.json to the configured Discord webhook. "
+                        + "Discord synchronization is disabled until state storage is repaired and the server is restarted.");
+            }
+        }
 
         String userAgent = plugin.getDescription().getName() + "/" + plugin.getDescription().getVersion();
-        DiscordWebhookClient webhookClient = new DiscordWebhookClient(userAgent);
-        this.messageSynchronizer = new DiscordMessageSynchronizer(
-                webhookClient,
-                new DiscordMessageSynchronizer.MessageState() {
-                    @Override
-                    public boolean isCreateBlocked() {
-                        return createOutcomeUnknown;
-                    }
-
-                    @Override
-                    public void persist(List<String> updatedMessageIds) throws IOException {
-                        persistMessageIds(updatedMessageIds);
-                    }
-
-                    @Override
-                    public void blockCreate(List<String> knownMessageIds) throws IOException {
-                        markCreateOutcomeUnknown(knownMessageIds, false);
-                    }
-
-                    @Override
-                    public void beginCreate(List<String> knownMessageIds) throws IOException {
-                        markCreateOutcomeUnknown(knownMessageIds, true);
-                    }
-
-                    @Override
-                    public void completeCreate(List<String> updatedMessageIds) throws IOException {
-                        completeMessageCreate(updatedMessageIds);
-                    }
-
-                    @Override
-                    public void cancelCreate(List<String> knownMessageIds) throws IOException {
-                        cancelMessageCreate(knownMessageIds);
-                    }
-
-                    @Override
-                    public void finishCreateAttempt() {
-                        createInProgress = false;
-                    }
-                }
-        );
+        this.webhookClient = new DiscordWebhookClient(userAgent);
     }
 
     public void requestSync(String reason) {
@@ -101,6 +77,22 @@ public final class DiscordSyncService {
         }
     }
 
+    public void reloadConfiguration() throws IOException {
+        ConfiguredWebhookIdentity configuredIdentity = configuredWebhookIdentity();
+        try {
+            boolean changed = webhookStateManager.advanceConfiguration(
+                    configuredIdentity.identity(),
+                    configuredIdentity.rebindState()
+            );
+            if (changed) {
+                plugin.getLogger().info("Discord webhook destination changed; cleared tracked message IDs for a clean lifecycle.");
+            }
+        } catch (IOException ex) {
+            runtimeStateUsable = false;
+            throw ex;
+        }
+    }
+
     public void shutdown() {
         requestQueue.stop();
         synchronized (lifecycleLock) {
@@ -112,22 +104,11 @@ public final class DiscordSyncService {
     }
 
     public boolean recoverAmbiguousCreate() throws IOException {
-        synchronized (lifecycleLock) {
-            if (createInProgress) {
-                throw new SyncException("A Discord message create request is still in progress. Wait for it to "
-                        + "finish before confirming recovery.");
-            }
-            if (!runtimeStateUsable) {
-                throw new SyncException("Discord runtime state is unavailable. Repair state storage and reconcile "
-                        + "the Discord messages if needed, then restart the server.");
-            }
-            if (!createOutcomeUnknown) {
-                return false;
-            }
-            messageStateStore.save(messageIds, false);
-            createOutcomeUnknown = false;
-            return true;
+        if (!runtimeStateUsable) {
+            throw new SyncException("Discord runtime state is unavailable. Repair state storage and reconcile "
+                    + "the Discord messages if needed, then restart the server.");
         }
+        return webhookStateManager.recoverAmbiguousCreate();
     }
 
     private void runSyncLoop() {
@@ -140,6 +121,9 @@ public final class DiscordSyncService {
             try {
                 syncOnce(work.reason());
                 retryAttempt = 0;
+            } catch (StaleConfigurationException ex) {
+                retryAttempt = 0;
+                plugin.getLogger().info("Discarded a Discord sync result because configuration changed while it was in flight.");
             } catch (RetryableSyncException ex) {
                 retryAttempt++;
                 if (retryAttempt <= RetryPolicy.MAX_ATTEMPTS && !requestQueue.isStopped()) {
@@ -196,12 +180,20 @@ public final class DiscordSyncService {
             return;
         }
 
+        DiscordMessageSynchronizer messageSynchronizer = new DiscordMessageSynchronizer(
+                webhookClient,
+                webhookStateManager.bind(snapshot.generation(), snapshot.webhookIdentity())
+        );
         List<String> finalMessageIds = messageSynchronizer.synchronize(
                 snapshot.endpoint(),
                 snapshot.chunks(),
                 snapshot.messageIds()
         );
-        messageIds = finalMessageIds;
+        webhookStateManager.commitSyncResult(
+                snapshot.generation(),
+                snapshot.webhookIdentity(),
+                finalMessageIds
+        );
         plugin.getLogger().info("Updated Discord webhook messages (" + snapshot.chunks().size()
                 + " chunk(s), reason: " + reason + ")");
     }
@@ -222,7 +214,7 @@ public final class DiscordSyncService {
         }
         FileConfiguration config = plugin.config();
         String configuredUrl = config.getString("discord.webhook-url", "").trim();
-        if (configuredUrl.isEmpty() || configuredUrl.equals("PUT_DISCORD_WEBHOOK_URL_HERE")) {
+        if (isWebhookUnconfigured(configuredUrl)) {
             return SyncSnapshot.unconfigured("Skipping Discord sync: discord.webhook-url is not configured.");
         }
 
@@ -233,51 +225,43 @@ public final class DiscordSyncService {
             return SyncSnapshot.unconfigured("Skipping Discord sync: " + ex.getMessage());
         }
 
-        return new SyncSnapshot(true, null, endpoint, List.copyOf(messageIds), buildDiscordMessages(config));
+        WebhookStateManager.Snapshot stateSnapshot = webhookStateManager.snapshot();
+        if (!Objects.equals(stateSnapshot.webhookIdentity(), endpoint.stateIdentity())) {
+            return SyncSnapshot.unconfigured("Skipping Discord sync: webhook runtime state is not bound to the "
+                    + "configured destination. Run /lsd reload or restart the server after fixing state storage.");
+        }
+
+        return new SyncSnapshot(
+                true,
+                null,
+                endpoint,
+                stateSnapshot.generation(),
+                stateSnapshot.webhookIdentity(),
+                stateSnapshot.messageIds(),
+                buildDiscordMessages(config)
+        );
     }
 
-    private void persistMessageIds(List<String> updatedMessageIds) throws IOException {
-        synchronized (lifecycleLock) {
-            messageStateStore.save(updatedMessageIds, createOutcomeUnknown);
-            messageIds = List.copyOf(updatedMessageIds);
+    private ConfiguredWebhookIdentity configuredWebhookIdentity() {
+        String configuredUrl = plugin.config().getString("discord.webhook-url", "").trim();
+        if (isWebhookUnconfigured(configuredUrl)) {
+            return new ConfiguredWebhookIdentity(null, true);
+        }
+        try {
+            return new ConfiguredWebhookIdentity(WebhookEndpoint.parse(configuredUrl).stateIdentity(), true);
+        } catch (SyncException ex) {
+            return new ConfiguredWebhookIdentity(null, false);
         }
     }
 
-    private void markCreateOutcomeUnknown(List<String> knownMessageIds, boolean inProgress) throws IOException {
-        synchronized (lifecycleLock) {
-            createOutcomeUnknown = true;
-            messageIds = List.copyOf(knownMessageIds);
-            messageStateStore.save(messageIds, true);
-            createInProgress = inProgress;
-        }
+    private boolean isWebhookUnconfigured(String configuredUrl) {
+        return configuredUrl.isEmpty() || configuredUrl.equals("PUT_DISCORD_WEBHOOK_URL_HERE");
     }
 
-    private void completeMessageCreate(List<String> updatedMessageIds) throws IOException {
-        synchronized (lifecycleLock) {
-            try {
-                messageIds = List.copyOf(updatedMessageIds);
-                messageStateStore.save(messageIds, false);
-                createOutcomeUnknown = false;
-            } finally {
-                createInProgress = false;
-            }
-        }
-    }
-
-    private void cancelMessageCreate(List<String> knownMessageIds) throws IOException {
-        synchronized (lifecycleLock) {
-            try {
-                List<String> safeIds = List.copyOf(knownMessageIds);
-                messageStateStore.save(safeIds, false);
-                messageIds = safeIds;
-                createOutcomeUnknown = false;
-            } finally {
-                createInProgress = false;
-            }
-        }
-    }
-
-    private InitialMessageState loadInitialMessageState(Path statePath) {
+    private InitialMessageState loadInitialMessageState(
+            Path statePath,
+            ConfiguredWebhookIdentity configuredIdentity
+    ) {
         if (Files.exists(statePath)) {
             try {
                 return new InitialMessageState(messageStateStore.load(), true);
@@ -285,7 +269,10 @@ public final class DiscordSyncService {
                 plugin.getLogger().severe("Could not read message-state.json. Discord synchronization is disabled "
                         + "to prevent duplicate messages. Repair or remove the file after reconciling the Discord "
                         + "messages, then restart the server.");
-                return new InitialMessageState(new MessageStateStore.State(List.of(), true), false);
+                return new InitialMessageState(
+                        new MessageStateStore.State(List.of(), true, configuredIdentity.identity()),
+                        false
+                );
             }
         }
 
@@ -298,24 +285,32 @@ public final class DiscordSyncService {
         if (ignoredConfiguredId) {
             plugin.getLogger().warning("Ignored invalid or duplicate Discord message IDs from config.yml.");
         }
-        if (!sanitized.isEmpty()) {
+
+        String migrationIdentity = configuredIdentity.rebindState() ? configuredIdentity.identity() : null;
+        if (!sanitized.isEmpty() && migrationIdentity != null) {
             try {
-                messageStateStore.save(sanitized, false);
+                messageStateStore.save(sanitized, false, migrationIdentity);
                 plugin.getLogger().info("Migrated Discord message IDs to message-state.json.");
             } catch (IOException ex) {
                 plugin.getLogger().severe("Could not migrate Discord message IDs to message-state.json. Discord "
                         + "synchronization is disabled to prevent untracked messages. Fix state storage, then "
                         + "restart the server.");
                 return new InitialMessageState(
-                        new MessageStateStore.State(List.copyOf(sanitized), true),
+                        new MessageStateStore.State(List.copyOf(sanitized), true, migrationIdentity),
                         false
                 );
             }
         }
-        return new InitialMessageState(new MessageStateStore.State(List.copyOf(sanitized), false), true);
+        return new InitialMessageState(
+                new MessageStateStore.State(List.copyOf(sanitized), false, migrationIdentity),
+                true
+        );
     }
 
     private record InitialMessageState(MessageStateStore.State state, boolean usable) {
+    }
+
+    private record ConfiguredWebhookIdentity(String identity, boolean rebindState) {
     }
 
     private void logSafeFailure(String reason, Exception exception) {
@@ -493,11 +488,13 @@ public final class DiscordSyncService {
             boolean configured,
             String configurationMessage,
             WebhookEndpoint endpoint,
+            long generation,
+            String webhookIdentity,
             List<String> messageIds,
             List<String> chunks
     ) {
         static SyncSnapshot unconfigured(String message) {
-            return new SyncSnapshot(false, message, null, List.of(), List.of());
+            return new SyncSnapshot(false, message, null, -1L, null, List.of(), List.of());
         }
     }
 
