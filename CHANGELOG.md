@@ -16,6 +16,10 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Configure Dependabot to keep Gradle and GitHub Actions dependencies current on `dev`, while leaving the Paper API pinned for manual updates.
 - Debounce join and quit synchronization requests with a configurable trailing-edge window so bursts of player activity produce one final update. `updates.event-debounce-seconds` defaults to 5 seconds, is clamped to 0-60 seconds, and can be set to 0 to disable debouncing; `/lsd sync` remains immediate.
 
+### Added
+
+- Add deterministic loopback HTTP integration tests for the real webhook client, covering request construction, top-level message-ID parsing, Discord unknown-message recovery, rate-limit delays, and controllable delayed responses without contacting Discord.
+
 ### Dependencies
 
 - Update `io.papermc.paper:paper-api` to `26.2.build.121-stable`
@@ -70,7 +74,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Add GitHub Actions validation for pushes and pull requests.
 - Add a release workflow that verifies the release tag, runs the tests, and attaches one versioned plugin JAR plus its SHA-256 checksum.
 - Add a server-owner README covering installation, configuration, commands, upgrades, behavior, troubleshooting, and source builds.
-- Add `/lsd recover-create confirm` for safely resuming creation after an administrator resolves an ambiguous Discord response.
+- Add `/lsd recover-create confirm` for safely resuming creation after an ambiguous Discord response.
 
 ## [1.1.0]
 
