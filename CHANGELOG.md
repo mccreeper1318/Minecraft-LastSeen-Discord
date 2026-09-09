@@ -2,6 +2,12 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
+## [1.1.2]
+
+### Changed
+
+- Configure Dependabot to keep Gradle and GitHub Actions dependencies current on `dev`, while leaving the Paper API pinned for manual updates.
+
 ## [1.1.1]
 
 ### Security
