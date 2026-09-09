@@ -26,6 +26,41 @@ class WebhookEndpointTest {
     }
 
     @Test
+    void buildsCreateAndMessageUrisWithoutConfiguredQuery() throws Exception {
+        WebhookEndpoint endpoint = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/123456789012345678/token_value"
+        );
+
+        assertEquals(
+                "https://discord.com/api/webhooks/123456789012345678/token_value?wait=true",
+                endpoint.executeUri().toString()
+        );
+        assertEquals(
+                "https://discord.com/api/webhooks/123456789012345678/token_value/messages/987654321012345678",
+                endpoint.messageUri("987654321012345678").toString()
+        );
+    }
+
+    @Test
+    void normalizesTrailingSlashAndPreservesQueryParametersWithoutDuplication() throws Exception {
+        WebhookEndpoint endpoint = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/123456789012345678/token_value/"
+                        + "?thread_id=999&wait=false&custom=value"
+        );
+
+        assertEquals(
+                "https://discord.com/api/webhooks/123456789012345678/token_value"
+                        + "?thread_id=999&custom=value&wait=true",
+                endpoint.executeUri().toString()
+        );
+        assertEquals(
+                "https://discord.com/api/webhooks/123456789012345678/token_value/messages/987654321012345678"
+                        + "?thread_id=999&wait=false&custom=value",
+                endpoint.messageUri("987654321012345678").toString()
+        );
+    }
+
+    @Test
     void webhookStateIdentityUsesOnlyTheNonSecretWebhookId() throws Exception {
         String firstToken = "first_secret_token";
         String secondToken = "second_secret_token";
