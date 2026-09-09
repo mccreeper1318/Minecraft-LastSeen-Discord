@@ -4,6 +4,10 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ## [1.1.2]
 
+### Fixed
+
+- Build threaded Discord webhook message URLs from parsed URI components so edit and delete endpoints place `/messages/{id}` before existing query parameters, while preserving query values and handling trailing slashes correctly.
+
 ### Changed
 
 - Configure Dependabot to keep Gradle and GitHub Actions dependencies current on `dev`, while leaving the Paper API pinned for manual updates.
