@@ -9,6 +9,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Build threaded Discord webhook message URLs from parsed URI components so edit and delete endpoints place `/messages/{id}` before existing query parameters, while preserving query values and handling trailing slashes correctly.
 - Shut synchronization down cleanly by invalidating in-flight state mutations, dropping queued and retry work, cancelling delayed retries, and force-stopping the webhook HTTP client so late completions cannot write stale runtime state.
 - Move player-list sorting, activity classification, Discord formatting, escaping, and pagination off the Minecraft server thread. Synchronization now captures only Bukkit-owned player/configuration data synchronously into immutable records before rendering and sending asynchronously.
+- Keep normal edit-only synchronizations write-free when managed Discord message IDs are unchanged. Generated message state remains outside `config.yml` in atomic `message-state.json`, preventing synchronization from overwriting unrelated administrator configuration edits.
 
 ### Changed
 
