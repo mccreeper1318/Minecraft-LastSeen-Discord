@@ -139,7 +139,7 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
 
                     @Override
                     public boolean contains(String path) {
-                        return config.contains(path);
+                        return config.isSet(path);
                     }
                 },
                 message -> getLogger().warning("Configuration: " + message)
