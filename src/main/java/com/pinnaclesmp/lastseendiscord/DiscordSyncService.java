@@ -94,6 +94,7 @@ public final class DiscordSyncService {
     }
 
     public void shutdown() {
+        webhookStateManager.shutdown();
         requestQueue.stop();
         synchronized (lifecycleLock) {
             if (retryTask != null) {
@@ -101,6 +102,7 @@ public final class DiscordSyncService {
                 retryTask = null;
             }
         }
+        webhookClient.shutdown();
     }
 
     public boolean recoverAmbiguousCreate() throws IOException {
@@ -212,6 +214,12 @@ public final class DiscordSyncService {
             return SyncSnapshot.unconfigured("Skipping Discord sync: runtime state is unavailable. Repair state "
                     + "storage and reconcile the Discord messages if needed, then restart the server.");
         }
+
+        WebhookStateManager.Snapshot stateSnapshot = webhookStateManager.snapshot();
+        if (stateSnapshot.stopped()) {
+            return SyncSnapshot.unconfigured("Skipping Discord sync: plugin shutdown is in progress.");
+        }
+
         FileConfiguration config = plugin.config();
         String configuredUrl = config.getString("discord.webhook-url", "").trim();
         if (isWebhookUnconfigured(configuredUrl)) {
@@ -225,7 +233,6 @@ public final class DiscordSyncService {
             return SyncSnapshot.unconfigured("Skipping Discord sync: " + ex.getMessage());
         }
 
-        WebhookStateManager.Snapshot stateSnapshot = webhookStateManager.snapshot();
         if (!Objects.equals(stateSnapshot.webhookIdentity(), endpoint.stateIdentity())) {
             return SyncSnapshot.unconfigured("Skipping Discord sync: webhook runtime state is not bound to the "
                     + "configured destination. Run /lsd reload or restart the server after fixing state storage.");
