@@ -12,6 +12,7 @@ final class WebhookStateManager {
     private boolean createInProgress;
     private String webhookIdentity;
     private long configurationGeneration;
+    private boolean stopped;
 
     WebhookStateManager(MessageStateStore stateStore, MessageStateStore.State initialState) {
         this.stateStore = stateStore;
@@ -21,6 +22,7 @@ final class WebhookStateManager {
     }
 
     synchronized boolean advanceConfiguration(String configuredWebhookIdentity, boolean rebindState) throws IOException {
+        requireRunning();
         configurationGeneration++;
         if (!rebindState || Objects.equals(webhookIdentity, configuredWebhookIdentity)) {
             return false;
@@ -34,13 +36,22 @@ final class WebhookStateManager {
         return true;
     }
 
+    synchronized void shutdown() {
+        if (stopped) {
+            return;
+        }
+        stopped = true;
+        configurationGeneration++;
+    }
+
     synchronized Snapshot snapshot() {
         return new Snapshot(
                 configurationGeneration,
                 webhookIdentity,
                 List.copyOf(messageIds),
                 createOutcomeUnknown,
-                createInProgress
+                createInProgress,
+                stopped
         );
     }
 
@@ -90,6 +101,7 @@ final class WebhookStateManager {
     }
 
     synchronized boolean recoverAmbiguousCreate() throws IOException {
+        requireRunning();
         if (createInProgress) {
             throw new SyncException("A Discord message create request is still in progress. Wait for it to "
                     + "finish before confirming recovery.");
@@ -133,7 +145,7 @@ final class WebhookStateManager {
     private synchronized void completeCreateFor(long generation, String identity, List<String> updatedMessageIds)
             throws IOException {
         if (!isCurrent(generation, identity)) {
-            if (Objects.equals(identity, webhookIdentity)) {
+            if (!stopped && Objects.equals(identity, webhookIdentity)) {
                 createInProgress = false;
             }
             throw new StaleConfigurationException();
@@ -151,7 +163,7 @@ final class WebhookStateManager {
     private synchronized void cancelCreateFor(long generation, String identity, List<String> knownMessageIds)
             throws IOException {
         if (!isCurrent(generation, identity)) {
-            if (Objects.equals(identity, webhookIdentity)) {
+            if (!stopped && Objects.equals(identity, webhookIdentity)) {
                 createInProgress = false;
             }
             throw new StaleConfigurationException();
@@ -167,8 +179,14 @@ final class WebhookStateManager {
     }
 
     private synchronized void finishCreateAttemptFor(String identity) {
-        if (Objects.equals(identity, webhookIdentity)) {
+        if (!stopped && Objects.equals(identity, webhookIdentity)) {
             createInProgress = false;
+        }
+    }
+
+    private void requireRunning() throws StaleConfigurationException {
+        if (stopped) {
+            throw new StaleConfigurationException();
         }
     }
 
@@ -179,7 +197,9 @@ final class WebhookStateManager {
     }
 
     private boolean isCurrent(long generation, String identity) {
-        return generation == configurationGeneration && Objects.equals(identity, webhookIdentity);
+        return !stopped
+                && generation == configurationGeneration
+                && Objects.equals(identity, webhookIdentity);
     }
 
     record Snapshot(
@@ -187,7 +207,8 @@ final class WebhookStateManager {
             String webhookIdentity,
             List<String> messageIds,
             boolean createOutcomeUnknown,
-            boolean createInProgress
+            boolean createInProgress,
+            boolean stopped
     ) {
     }
 }
