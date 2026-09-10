@@ -11,9 +11,9 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Move player-list sorting, activity classification, Discord formatting, escaping, and pagination off the Minecraft server thread. Synchronization now captures only Bukkit-owned player/configuration data synchronously into immutable records before rendering and sending asynchronously.
 - Keep normal edit-only synchronizations write-free when managed Discord message IDs are unchanged. Generated message state remains outside `config.yml` in atomic `message-state.json`, preventing synchronization from overwriting unrelated administrator configuration edits.
 - Centralize startup and reload validation for webhook, activity, scheduling, debounce, toggle, header, and legacy message-ID settings. Invalid scalar values now produce field-specific safe warnings, scheduling values are bounded before tick conversion, invalid timestamp sources fall back to `LAST_SEEN`, and malformed or duplicate stored IDs cannot enter active state.
-- Preserve version 1/2 `message-state.json` IDs and ambiguous-create safety state while binding them to the configured webhook identity during migration instead of discarding tracked messages.
+- Preserve version 1/2 `message-state.json` IDs and deferred legacy IDs from older configuration while binding them to the first valid configured webhook identity instead of discarding tracked messages.
 - Retain existing tracked message state when the webhook is temporarily blank, placeholder, or otherwise unconfigured so restoring the same destination does not create duplicate messages.
-- Include `thread_id` in the non-secret webhook state identity so changing Discord threads starts a separate managed message lifecycle while webhook token rotation preserves the existing one.
+- Include `thread_id` in the non-secret webhook state identity, including percent-encoded query-name forms, so changing Discord threads starts a separate managed message lifecycle while webhook token rotation preserves the existing one.
 
 ### Changed
 
