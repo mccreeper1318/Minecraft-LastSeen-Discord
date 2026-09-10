@@ -21,10 +21,12 @@ final class WebhookEndpoint {
 
     private final URI baseUri;
     private final String webhookId;
+    private final String threadId;
 
-    private WebhookEndpoint(URI baseUri, String webhookId) {
+    private WebhookEndpoint(URI baseUri, String webhookId, String threadId) {
         this.baseUri = baseUri;
         this.webhookId = webhookId;
+        this.threadId = threadId;
     }
 
     static WebhookEndpoint parse(String configuredUrl) throws SyncException {
@@ -53,6 +55,7 @@ final class WebhookEndpoint {
             if (!webhookId.matches("[0-9]{1,20}") || !webhookToken.matches("[A-Za-z0-9._-]+")) {
                 throw invalidWebhook();
             }
+            String threadId = extractThreadId(uri.getRawQuery());
 
             return new WebhookEndpoint(new URI(
                     "https",
@@ -60,7 +63,7 @@ final class WebhookEndpoint {
                     path,
                     uri.getQuery(),
                     null
-            ), webhookId);
+            ), webhookId, threadId);
         } catch (URISyntaxException | IllegalArgumentException ex) {
             throw invalidWebhook();
         }
@@ -88,11 +91,13 @@ final class WebhookEndpoint {
     }
 
     String stateIdentity() {
-        return STATE_IDENTITY_PREFIX + webhookId;
+        String identity = STATE_IDENTITY_PREFIX + webhookId;
+        return threadId == null ? identity : identity + ":thread:" + threadId;
     }
 
     static boolean isValidStateIdentity(String identity) {
-        return identity != null && identity.matches(STATE_IDENTITY_PREFIX + "[0-9]{1,20}");
+        return identity != null
+                && identity.matches(STATE_IDENTITY_PREFIX + "[0-9]{1,20}(?::thread:[0-9]{1,20})?");
     }
 
     static boolean isValidMessageId(String messageId) {
@@ -105,6 +110,28 @@ final class WebhookEndpoint {
         } catch (URISyntaxException ex) {
             throw new IllegalStateException("Could not construct a Discord request endpoint.");
         }
+    }
+
+    private static String extractThreadId(String rawQuery) throws SyncException {
+        if (rawQuery == null || rawQuery.isBlank()) {
+            return null;
+        }
+
+        String threadId = null;
+        for (String part : rawQuery.split("&")) {
+            int separator = part.indexOf('=');
+            String name = separator < 0 ? part : part.substring(0, separator);
+            if (!"thread_id".equals(name)) {
+                continue;
+            }
+
+            String value = separator < 0 ? "" : part.substring(separator + 1);
+            if (threadId != null || !isValidMessageId(value)) {
+                throw invalidWebhook();
+            }
+            threadId = value;
+        }
+        return threadId;
     }
 
     private static String trimTrailingSlash(String value) {
