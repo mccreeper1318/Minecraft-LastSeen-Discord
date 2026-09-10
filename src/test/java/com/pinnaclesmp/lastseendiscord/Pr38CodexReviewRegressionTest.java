@@ -57,6 +57,33 @@ class Pr38CodexReviewRegressionTest {
     }
 
     @Test
+    void deferredLegacyIdsBindWhenFirstValidWebhookIsConfigured() throws Exception {
+        Path stateFile = temporaryDirectory.resolve("message-state.json");
+        MessageStateStore store = new MessageStateStore(stateFile);
+        MessageStateStore.State deferred = new MessageStateStore.State(
+                List.of(MESSAGE_ID),
+                false,
+                null
+        );
+
+        assertTrue(deferred.identityBindingRequired());
+        assertEquals(List.of(MESSAGE_ID), deferred.messageIds());
+
+        WebhookStateManager manager = new WebhookStateManager(store, deferred);
+        assertFalse(manager.advanceConfiguration(null, false));
+        assertEquals(List.of(MESSAGE_ID), manager.snapshot().messageIds());
+
+        String configuredIdentity = "discord-webhook:" + WEBHOOK_ID;
+        assertFalse(manager.advanceConfiguration(configuredIdentity, true));
+
+        assertEquals(configuredIdentity, manager.snapshot().webhookIdentity());
+        assertEquals(List.of(MESSAGE_ID), manager.snapshot().messageIds());
+        assertEquals(configuredIdentity, store.load().webhookIdentity());
+        assertEquals(List.of(MESSAGE_ID), store.load().messageIds());
+        assertFalse(store.load().identityBindingRequired());
+    }
+
+    @Test
     void unconfiguredReloadRetainsBoundMessageStateUntilWebhookReturns() throws Exception {
         Path stateFile = temporaryDirectory.resolve("message-state.json");
         MessageStateStore store = new MessageStateStore(stateFile);
@@ -101,6 +128,26 @@ class Pr38CodexReviewRegressionTest {
     }
 
     @Test
+    void percentEncodedThreadNameUsesTheSameDestinationIdentity() throws Exception {
+        WebhookEndpoint plain = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/" + WEBHOOK_ID + "/token?thread_id=" + THREAD_A
+        );
+        WebhookEndpoint encodedName = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/" + WEBHOOK_ID + "/token?thread%5Fid=" + THREAD_A
+        );
+        WebhookEndpoint encodedDifferentThread = WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/" + WEBHOOK_ID + "/token?thread%5Fid=" + THREAD_B
+        );
+
+        assertEquals(plain.stateIdentity(), encodedName.stateIdentity());
+        assertNotEquals(encodedName.stateIdentity(), encodedDifferentThread.stateIdentity());
+        assertEquals(
+                "https://discord.com/api/webhooks/" + WEBHOOK_ID + "/token?thread_id=" + THREAD_A + "&wait=true",
+                encodedName.executeUri().toString()
+        );
+    }
+
+    @Test
     void changingThreadClearsIdsForASeparateMessageLifecycle() throws Exception {
         Path stateFile = temporaryDirectory.resolve("message-state.json");
         MessageStateStore store = new MessageStateStore(stateFile);
@@ -124,6 +171,10 @@ class Pr38CodexReviewRegressionTest {
         ));
         assertThrows(SyncException.class, () -> WebhookEndpoint.parse(
                 "https://discord.com/api/webhooks/" + WEBHOOK_ID + "/token?thread_id=" + THREAD_A
+                        + "&thread_id=" + THREAD_B
+        ));
+        assertThrows(SyncException.class, () -> WebhookEndpoint.parse(
+                "https://discord.com/api/webhooks/" + WEBHOOK_ID + "/token?thread%5Fid=" + THREAD_A
                         + "&thread_id=" + THREAD_B
         ));
     }
