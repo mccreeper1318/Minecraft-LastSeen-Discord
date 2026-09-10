@@ -148,7 +148,13 @@ final class MessageStateStore {
             boolean identityBindingRequired
     ) {
         State(List<String> messageIds, boolean createOutcomeUnknown, String webhookIdentity) {
-            this(messageIds, createOutcomeUnknown, webhookIdentity, false);
+            this(
+                    messageIds,
+                    createOutcomeUnknown,
+                    webhookIdentity,
+                    webhookIdentity == null
+                            && ((messageIds != null && !messageIds.isEmpty()) || createOutcomeUnknown)
+            );
         }
     }
 
