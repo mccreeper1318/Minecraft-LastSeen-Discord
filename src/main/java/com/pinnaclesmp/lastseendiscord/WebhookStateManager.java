@@ -11,6 +11,7 @@ final class WebhookStateManager {
     private boolean createOutcomeUnknown;
     private boolean createInProgress;
     private String webhookIdentity;
+    private boolean identityBindingRequired;
     private long configurationGeneration;
     private boolean stopped;
 
@@ -19,11 +20,23 @@ final class WebhookStateManager {
         this.messageIds = List.copyOf(initialState.messageIds());
         this.createOutcomeUnknown = initialState.createOutcomeUnknown();
         this.webhookIdentity = initialState.webhookIdentity();
+        this.identityBindingRequired = initialState.identityBindingRequired();
     }
 
     synchronized boolean advanceConfiguration(String configuredWebhookIdentity, boolean rebindState) throws IOException {
         requireRunning();
         configurationGeneration++;
+
+        if (identityBindingRequired) {
+            if (!rebindState || configuredWebhookIdentity == null) {
+                return false;
+            }
+            stateStore.save(messageIds, createOutcomeUnknown, configuredWebhookIdentity);
+            webhookIdentity = configuredWebhookIdentity;
+            identityBindingRequired = false;
+            return false;
+        }
+
         if (!rebindState || Objects.equals(webhookIdentity, configuredWebhookIdentity)) {
             return false;
         }
