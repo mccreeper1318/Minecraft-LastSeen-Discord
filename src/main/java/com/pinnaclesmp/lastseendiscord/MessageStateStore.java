@@ -52,7 +52,14 @@ final class MessageStateStore {
                     throw new IOException("The Discord message state file contains unbound message state.");
                 }
             }
-            return new State(List.copyOf(sanitized), createOutcomeUnknown, webhookIdentity);
+            boolean identityBindingRequired = document.version < 3
+                    && (!sanitized.isEmpty() || createOutcomeUnknown);
+            return new State(
+                    List.copyOf(sanitized),
+                    createOutcomeUnknown,
+                    webhookIdentity,
+                    identityBindingRequired
+            );
         } catch (JsonParseException ex) {
             throw new IOException("The Discord message state file is not valid JSON.", ex);
         }
@@ -134,7 +141,15 @@ final class MessageStateStore {
         return WebhookEndpoint.isValidStateIdentity(trimmed) ? trimmed : null;
     }
 
-    record State(List<String> messageIds, boolean createOutcomeUnknown, String webhookIdentity) {
+    record State(
+            List<String> messageIds,
+            boolean createOutcomeUnknown,
+            String webhookIdentity,
+            boolean identityBindingRequired
+    ) {
+        State(List<String> messageIds, boolean createOutcomeUnknown, String webhookIdentity) {
+            this(messageIds, createOutcomeUnknown, webhookIdentity, false);
+        }
     }
 
     private record StateDocument(
