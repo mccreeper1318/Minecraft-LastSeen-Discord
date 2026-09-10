@@ -75,6 +75,10 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         }
     }
 
+    void shutdown() {
+        httpClient.shutdownNow();
+    }
+
     private HttpResponse<String> send(HttpRequest request, String action, boolean serverFailureMayBeAmbiguous)
             throws IOException, InterruptedException {
         final HttpResponse<String> response;

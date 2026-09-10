@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 
 final class WebhookEndpoint {
+    private static final String STATE_IDENTITY_PREFIX = "discord-webhook:";
     private static final Set<String> DISCORD_HOSTS = Set.of(
             "discord.com",
             "www.discord.com",
@@ -19,9 +20,17 @@ final class WebhookEndpoint {
     );
 
     private final URI baseUri;
+    private final String webhookId;
+    private final String threadId;
 
-    private WebhookEndpoint(URI baseUri) {
+    private WebhookEndpoint(URI baseUri, String webhookId) {
+        this(baseUri, webhookId, null);
+    }
+
+    private WebhookEndpoint(URI baseUri, String webhookId, String threadId) {
         this.baseUri = baseUri;
+        this.webhookId = webhookId;
+        this.threadId = threadId;
     }
 
     static WebhookEndpoint parse(String configuredUrl) throws SyncException {
@@ -50,14 +59,16 @@ final class WebhookEndpoint {
             if (!webhookId.matches("[0-9]{1,20}") || !webhookToken.matches("[A-Za-z0-9._-]+")) {
                 throw invalidWebhook();
             }
+            String decodedQuery = uri.getQuery();
+            String threadId = extractThreadId(decodedQuery);
 
             return new WebhookEndpoint(new URI(
                     "https",
                     uri.getAuthority(),
                     path,
-                    uri.getQuery(),
+                    decodedQuery,
                     null
-            ));
+            ), webhookId, threadId);
         } catch (URISyntaxException | IllegalArgumentException ex) {
             throw invalidWebhook();
         }
@@ -84,6 +95,16 @@ final class WebhookEndpoint {
         return rebuild(baseUri.getPath() + "/messages/" + messageId, baseUri.getQuery());
     }
 
+    String stateIdentity() {
+        String identity = STATE_IDENTITY_PREFIX + webhookId;
+        return threadId == null ? identity : identity + ":thread:" + threadId;
+    }
+
+    static boolean isValidStateIdentity(String identity) {
+        return identity != null
+                && identity.matches(STATE_IDENTITY_PREFIX + "[0-9]{1,20}(?::thread:[0-9]{1,20})?");
+    }
+
     static boolean isValidMessageId(String messageId) {
         return messageId != null && messageId.matches("[0-9]{1,20}");
     }
@@ -94,6 +115,28 @@ final class WebhookEndpoint {
         } catch (URISyntaxException ex) {
             throw new IllegalStateException("Could not construct a Discord request endpoint.");
         }
+    }
+
+    private static String extractThreadId(String query) throws SyncException {
+        if (query == null || query.isBlank()) {
+            return null;
+        }
+
+        String threadId = null;
+        for (String part : query.split("&")) {
+            int separator = part.indexOf('=');
+            String name = separator < 0 ? part : part.substring(0, separator);
+            if (!"thread_id".equals(name)) {
+                continue;
+            }
+
+            String value = separator < 0 ? "" : part.substring(separator + 1);
+            if (threadId != null || !isValidMessageId(value)) {
+                throw invalidWebhook();
+            }
+            threadId = value;
+        }
+        return threadId;
     }
 
     private static String trimTrailingSlash(String value) {

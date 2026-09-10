@@ -2,6 +2,40 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
+## [1.1.2]
+
+### Fixed
+
+- Build threaded Discord webhook message URLs from parsed URI components so edit and delete endpoints place `/messages/{id}` before existing query parameters, while preserving query values and handling trailing slashes correctly.
+- Shut synchronization down cleanly by invalidating in-flight state mutations, dropping queued and retry work, cancelling delayed retries, and force-stopping the webhook HTTP client so late completions cannot write stale runtime state.
+- Move player-list sorting, activity classification, Discord formatting, escaping, and pagination off the Minecraft server thread. Synchronization now captures only Bukkit-owned player/configuration data synchronously into immutable records before rendering and sending asynchronously.
+- Keep normal edit-only synchronizations write-free when managed Discord message IDs are unchanged. Generated message state remains outside `config.yml` in atomic `message-state.json`, preventing synchronization from overwriting unrelated administrator configuration edits.
+- Centralize startup and reload validation for webhook, activity, scheduling, debounce, toggle, header, and legacy message-ID settings. Invalid scalar values now produce field-specific safe warnings, scheduling values are bounded before tick conversion, invalid timestamp sources fall back to `LAST_SEEN`, and malformed or duplicate stored IDs cannot enter active state.
+- Preserve version 1/2 `message-state.json` IDs and deferred legacy IDs from older configuration while binding them to the first valid configured webhook identity instead of discarding tracked messages.
+- Retain existing tracked message state when the webhook is temporarily blank, placeholder, or otherwise unconfigured so restoring the same destination does not create duplicate messages.
+- Include `thread_id` in the non-secret webhook state identity, including percent-encoded query-name forms, so changing Discord threads starts a separate managed message lifecycle while webhook token rotation preserves the existing one.
+
+### Changed
+
+- Configure Dependabot to keep Gradle and GitHub Actions dependencies current on `dev`, while leaving the Paper API pinned for manual updates.
+- Debounce join and quit synchronization requests with a configurable trailing-edge window so bursts of player activity produce one final update. `updates.event-debounce-seconds` defaults to 5 seconds, is clamped to 0-60 seconds, and can be set to 0 to disable debouncing; `/lsd sync` remains immediate.
+
+### Added
+
+- Add deterministic loopback HTTP integration tests for the real webhook client, covering request construction, top-level message-ID parsing, Discord unknown-message recovery, rate-limit delays, and controllable delayed responses without contacting Discord.
+- Add configuration boundary and migration regression tests covering legacy settings, scheduling limits, invalid timestamp values, webhook-secret redaction, and malformed or duplicate message IDs.
+
+### Dependencies
+
+- Update `io.papermc.paper:paper-api` to `26.2.build.121-stable`
+- Update `com.google.code.gson:gson` to `2.14.0`
+- Update `org.junit:junit-bom` to `6.1.3`
+- Update `gradle-wrapper` to `9.7.1`
+- Update `actions/checkout` to `7.0.1`
+- Update `actions/setup-java` to `6.0.0`
+- Update `gradle/actions/setup-gradle` to `6.3.0`
+- Update `actions/upload-artifact` to `7.0.1`
+
 ## [1.1.1]
 
 ### Security
@@ -45,7 +79,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Add GitHub Actions validation for pushes and pull requests.
 - Add a release workflow that verifies the release tag, runs the tests, and attaches one versioned plugin JAR plus its SHA-256 checksum.
 - Add a server-owner README covering installation, configuration, commands, upgrades, behavior, troubleshooting, and source builds.
-- Add `/lsd recover-create confirm` for safely resuming creation after an administrator resolves an ambiguous Discord response.
+- Add `/lsd recover-create confirm` for safely resuming creation after an ambiguous Discord response.
 
 ## [1.1.0]
 

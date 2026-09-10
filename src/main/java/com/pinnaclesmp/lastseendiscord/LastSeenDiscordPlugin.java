@@ -10,16 +10,18 @@ import java.io.IOException;
 
 public final class LastSeenDiscordPlugin extends JavaPlugin {
     private DiscordSyncService discordSyncService;
+    private volatile ValidatedConfiguration validatedConfiguration;
     private long schedulerTaskId = -1L;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        reloadValidatedConfiguration();
         this.discordSyncService = new DiscordSyncService(this);
         Bukkit.getPluginManager().registerEvents(new PlayerActivityListener(this), this);
         startScheduler();
 
-        if (getConfig().getBoolean("updates.update-on-enable", true)) {
+        if (validatedConfiguration.updateOnEnable()) {
             discordSyncService.requestSync("plugin enable");
         }
 
@@ -41,7 +43,7 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
     }
 
     private void startScheduler() {
-        long intervalMinutes = Math.max(1L, getConfig().getLong("updates.interval-minutes", 60L));
+        long intervalMinutes = validatedConfiguration.intervalMinutes();
         long intervalTicks = intervalMinutes * 60L * 20L;
 
         schedulerTaskId = Bukkit.getScheduler().runTaskTimer(
@@ -77,8 +79,18 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
 
         if (args[0].equalsIgnoreCase("reload")) {
             reloadConfig();
+            reloadValidatedConfiguration();
+            try {
+                discordSyncService.reloadConfiguration();
+            } catch (IOException ex) {
+                restartScheduler();
+                sender.sendMessage("§cConfig reloaded, but Discord runtime state could not be rebound. "
+                        + "Synchronization is disabled until state storage is fixed and the server is restarted.");
+                getLogger().severe("Could not rebind Discord message state after config reload.");
+                return true;
+            }
             restartScheduler();
-            sender.sendMessage("§aLastSeenDiscord config reloaded.");
+            sender.sendMessage("§aLastSeenDiscord config reloaded and validated.");
             discordSyncService.requestSync("manual reload");
             return true;
         }
@@ -114,6 +126,28 @@ public final class LastSeenDiscordPlugin extends JavaPlugin {
 
         sender.sendMessage("§eUsage: /" + label + " <reload|sync|recover-create>");
         return true;
+    }
+
+    private void reloadValidatedConfiguration() {
+        FileConfiguration config = getConfig();
+        validatedConfiguration = ValidatedConfiguration.parse(
+                new ValidatedConfiguration.Values() {
+                    @Override
+                    public Object get(String path) {
+                        return config.get(path);
+                    }
+
+                    @Override
+                    public boolean contains(String path) {
+                        return config.isSet(path);
+                    }
+                },
+                message -> getLogger().warning("Configuration: " + message)
+        );
+    }
+
+    ValidatedConfiguration validatedConfiguration() {
+        return validatedConfiguration;
     }
 
     public FileConfiguration config() {

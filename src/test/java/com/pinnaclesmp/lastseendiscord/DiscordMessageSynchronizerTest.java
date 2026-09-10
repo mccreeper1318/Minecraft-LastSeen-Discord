@@ -25,6 +25,29 @@ class DiscordMessageSynchronizerTest {
     }
 
     @Test
+    void editOnlySyncDoesNotPersistUnchangedMessageIds() throws Exception {
+        FakeClient client = new FakeClient();
+        FakeState state = new FakeState();
+        DiscordMessageSynchronizer synchronizer = new DiscordMessageSynchronizer(client, state);
+        List<String> existingIds = List.of("111111111111111111", "222222222222222222");
+
+        List<String> result = synchronizer.synchronize(
+                ENDPOINT,
+                List.of("one", "two"),
+                existingIds
+        );
+
+        assertEquals(existingIds, result);
+        assertEquals(List.of(), state.savedStates);
+        assertEquals(List.of(), state.blockedStates);
+        assertEquals(List.of(), state.cancelledStates);
+        assertEquals(List.of(
+                "edit:111111111111111111:one",
+                "edit:222222222222222222:two"
+        ), client.events);
+    }
+
+    @Test
     void persistsEveryCreatedIdBeforeCreatingTheNextPage() throws Exception {
         FakeClient client = new FakeClient("111111111111111111", "222222222222222222");
         FakeState state = new FakeState();
