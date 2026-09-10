@@ -59,13 +59,14 @@ final class WebhookEndpoint {
             if (!webhookId.matches("[0-9]{1,20}") || !webhookToken.matches("[A-Za-z0-9._-]+")) {
                 throw invalidWebhook();
             }
-            String threadId = extractThreadId(uri.getRawQuery());
+            String decodedQuery = uri.getQuery();
+            String threadId = extractThreadId(decodedQuery);
 
             return new WebhookEndpoint(new URI(
                     "https",
                     uri.getAuthority(),
                     path,
-                    uri.getQuery(),
+                    decodedQuery,
                     null
             ), webhookId, threadId);
         } catch (URISyntaxException | IllegalArgumentException ex) {
@@ -116,13 +117,13 @@ final class WebhookEndpoint {
         }
     }
 
-    private static String extractThreadId(String rawQuery) throws SyncException {
-        if (rawQuery == null || rawQuery.isBlank()) {
+    private static String extractThreadId(String query) throws SyncException {
+        if (query == null || query.isBlank()) {
             return null;
         }
 
         String threadId = null;
-        for (String part : rawQuery.split("&")) {
+        for (String part : query.split("&")) {
             int separator = part.indexOf('=');
             String name = separator < 0 ? part : part.substring(0, separator);
             if (!"thread_id".equals(name)) {
