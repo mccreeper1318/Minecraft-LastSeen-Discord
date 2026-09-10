@@ -23,6 +23,10 @@ final class WebhookEndpoint {
     private final String webhookId;
     private final String threadId;
 
+    private WebhookEndpoint(URI baseUri, String webhookId) {
+        this(baseUri, webhookId, null);
+    }
+
     private WebhookEndpoint(URI baseUri, String webhookId, String threadId) {
         this.baseUri = baseUri;
         this.webhookId = webhookId;
