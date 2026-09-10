@@ -27,8 +27,12 @@ final class WebhookStateManager {
         requireRunning();
         configurationGeneration++;
 
+        if (configuredWebhookIdentity == null) {
+            return false;
+        }
+
         if (identityBindingRequired) {
-            if (!rebindState || configuredWebhookIdentity == null) {
+            if (!rebindState) {
                 return false;
             }
             stateStore.save(messageIds, createOutcomeUnknown, configuredWebhookIdentity);
