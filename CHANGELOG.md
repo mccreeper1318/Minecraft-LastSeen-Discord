@@ -2,6 +2,12 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
+## [1.1.3]
+
+### Changed
+
+- Bumped actions/setup-java from 6.0.0 to 6.0.1
+
 ## [1.1.2]
 
 ### Fixed
