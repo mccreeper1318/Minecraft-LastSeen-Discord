@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,6 +101,57 @@ class ValidatedConfigurationTest {
         assertTrue(configuration.updateOnQuit());
         assertTrue(configuration.updateOnEnable());
         assertEquals(List.of("222222222222222222"), configuration.legacyMessageIds());
+        assertTrue(configuration.includesPlayer(
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                "AnyPlayer",
+                false
+        ));
+        assertEquals(ValidatedConfiguration.ActivityFilter.ALL, configuration.activityFilter());
+    }
+
+    @Test
+    void composesWhitelistUuidNameAndActivityFilters() {
+        UUID excludedUuid = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        UUID allowedUuid = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("filters.whitelist-only", true);
+        raw.put("filters.excluded-uuids", List.of(excludedUuid.toString()));
+        raw.put("filters.excluded-names", List.of("TestBot"));
+        raw.put("filters.activity", "inactive");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertFalse(configuration.includesPlayer(excludedUuid, "RenamedPlayer", true));
+        assertFalse(configuration.includesPlayer(allowedUuid, "testbot", true));
+        assertFalse(configuration.includesPlayer(allowedUuid, "AllowedPlayer", false));
+        assertTrue(configuration.includesPlayer(allowedUuid, "AllowedPlayer", true));
+        assertFalse(configuration.activityFilter().includes(true));
+        assertTrue(configuration.activityFilter().includes(false));
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test
+    void invalidFilterValuesFallBackSafely() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("filters.whitelist-only", "yes");
+        raw.put("filters.excluded-uuids", List.of("not-a-uuid", 42));
+        raw.put("filters.excluded-names", "NotAList");
+        raw.put("filters.activity", "sometimes");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertTrue(configuration.includesPlayer(
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                "AnyPlayer",
+                false
+        ));
+        assertEquals(ValidatedConfiguration.ActivityFilter.ALL, configuration.activityFilter());
+        assertWarningFor(warnings, "filters.whitelist-only");
+        assertWarningFor(warnings, "filters.excluded-uuids");
+        assertWarningFor(warnings, "filters.excluded-names");
+        assertWarningFor(warnings, "filters.activity");
     }
 
     @Test
