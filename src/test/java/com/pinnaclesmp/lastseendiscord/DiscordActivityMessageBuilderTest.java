@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,5 +43,36 @@ class DiscordActivityMessageBuilderTest {
         assertTrue(firstPlayer >= 0);
         assertTrue(lastPlayer > firstPlayer);
         assertTrue(rendered.contains("Updated: <t:1800000000:R>"));
+    }
+
+    @Test
+    void filtersActivityBeforePagination() {
+        long capturedAtMillis = 1_800_000_000_000L;
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                false,
+                "last seen",
+                "Filtered history",
+                ValidatedConfiguration.ActivityFilter.INACTIVE
+        );
+
+        List<DiscordActivityMessageBuilder.PlayerActivity> players = new ArrayList<>();
+        for (int index = 0; index < 500; index++) {
+            players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                    "ActivePlayer" + index,
+                    capturedAtMillis
+            ));
+        }
+        players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                "InactivePlayer",
+                capturedAtMillis - 31L * 24L * 60L * 60L * 1000L
+        ));
+
+        List<String> chunks = DiscordActivityMessageBuilder.build(settings, players, capturedAtMillis);
+
+        assertEquals(1, chunks.size());
+        String rendered = String.join("\n", chunks);
+        assertFalse(rendered.contains("ActivePlayer"));
+        assertTrue(rendered.contains("InactivePlayer (inactive)"));
     }
 }
