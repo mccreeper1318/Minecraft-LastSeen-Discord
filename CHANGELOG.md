@@ -4,6 +4,10 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ## [1.1.3]
 
+### Added
+
+- Add composable player filters for whitelist-only output, case-insensitive name exclusions, UUID exclusions that survive name changes, and ALL/ACTIVE/INACTIVE activity filtering. Filtering is applied before Discord pagination.
+
 ### Changed
 
 - Bumped actions/setup-java from 6.0.0 to 6.0.1
