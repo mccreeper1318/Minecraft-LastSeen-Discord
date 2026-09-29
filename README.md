@@ -71,8 +71,8 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 
 ## Updating from an older version
 
-1. Update the server to Paper 26.3 beta if it is still running Paper 26.2 or earlier.
-2. Stop the server.
+1. Stop the server.
+2. Update the server to Paper 26.3 beta if it is still running Paper 26.2 or earlier.
 3. Back up `plugins/LastSeenDiscord`.
 4. Replace the old JAR with the new release JAR.
 5. Start the server and confirm that `message-state.json` was created if the plugin already managed Discord messages.
