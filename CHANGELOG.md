@@ -14,6 +14,10 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 - Replace deprecated `JavaPlugin#getDescription()` metadata access with `JavaPlugin#getPluginMeta()` when constructing the Discord HTTP user agent.
 - Bumped actions/setup-java from 6.0.0 to 6.0.1.
 
+### Fixed
+
+- Allow release tags with prerelease suffixes such as `1.2.0-beta.1` when their base version matches the project version, and build prerelease JAR/plugin metadata using the full prerelease version.
+
 ### Dependencies
 
 - Update `io.papermc.paper:paper-api` to `26.3.build.136-beta`.
