@@ -4,8 +4,7 @@ plugins {
 }
 
 group = "com.pinnaclesmp"
-val baseVersion = "1.2.0"
-version = providers.gradleProperty("releaseVersion").orElse(baseVersion).get()
+version = "1.2.0"
 
 repositories {
     mavenCentral()
