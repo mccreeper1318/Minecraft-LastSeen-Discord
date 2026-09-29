@@ -49,7 +49,7 @@ public final class DiscordSyncService {
             }
         }
 
-        String userAgent = plugin.getDescription().getName() + "/" + plugin.getDescription().getVersion();
+        String userAgent = plugin.getPluginMeta().getName() + "/" + plugin.getPluginMeta().getVersion();
         this.webhookClient = new DiscordWebhookClient(userAgent);
     }
 
