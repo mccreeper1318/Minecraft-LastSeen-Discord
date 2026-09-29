@@ -28,15 +28,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(./gradlew -q printVersion)"
+          BASE_VERSION="$(./gradlew -q printVersion)"
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "${TAG_VERSION}" != "${VERSION}" ]]; then
-            echo "Release tag ${GITHUB_REF_NAME} does not match project version ${VERSION}." >&2
+          ESCAPED_BASE_VERSION="${BASE_VERSION//./\\.}"
+
+          if [[ "${TAG_VERSION}" == "${BASE_VERSION}" ]]; then
+            RELEASE_VERSION="${BASE_VERSION}"
+          elif [[ "${TAG_VERSION}" =~ ^${ESCAPED_BASE_VERSION}-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]; then
+            RELEASE_VERSION="${TAG_VERSION}"
+          else
+            echo "Release tag ${GITHUB_REF_NAME} does not match project base version ${BASE_VERSION}." >&2
             exit 1
           fi
 
-          ./gradlew clean test build
-          EXPECTED_JAR="build/libs/lastseen-discord-${VERSION}.jar"
+          EFFECTIVE_VERSION="$(./gradlew -q -PreleaseVersion="${RELEASE_VERSION}" printVersion)"
+          if [[ "${EFFECTIVE_VERSION}" != "${RELEASE_VERSION}" ]]; then
+            echo "Release version override produced ${EFFECTIVE_VERSION}, expected ${RELEASE_VERSION}." >&2
+            exit 1
+          fi
+
+          ./gradlew -PreleaseVersion="${RELEASE_VERSION}" clean test build
+          EXPECTED_JAR="build/libs/lastseen-discord-${RELEASE_VERSION}.jar"
           if [[ ! -f "${EXPECTED_JAR}" ]]; then
             echo "Expected plugin artifact ${EXPECTED_JAR} was not produced." >&2
             exit 1
