@@ -41,13 +41,33 @@ jobs:
             exit 1
           fi
 
-          EFFECTIVE_VERSION="$(./gradlew -q -PreleaseVersion="${RELEASE_VERSION}" printVersion)"
+          if [[ "${RELEASE_VERSION}" != "${BASE_VERSION}" ]]; then
+            python - "${BASE_VERSION}" "${RELEASE_VERSION}" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          base_version, release_version = sys.argv[1:3]
+          path = Path("build.gradle.kts")
+          source = path.read_text(encoding="utf-8")
+          pattern = rf'(?m)^version\s*=\s*"{re.escape(base_version)}"\s*$'
+          replacement = f'version = "{release_version}"'
+          updated, count = re.subn(pattern, replacement, source, count=1)
+          if count != 1:
+              raise SystemExit(
+                  f"Could not apply prerelease version {release_version} to build.gradle.kts."
+              )
+          path.write_text(updated, encoding="utf-8")
+          PY
+          fi
+
+          EFFECTIVE_VERSION="$(./gradlew -q printVersion)"
           if [[ "${EFFECTIVE_VERSION}" != "${RELEASE_VERSION}" ]]; then
-            echo "Release version override produced ${EFFECTIVE_VERSION}, expected ${RELEASE_VERSION}." >&2
+            echo "Release version resolved to ${EFFECTIVE_VERSION}, expected ${RELEASE_VERSION}." >&2
             exit 1
           fi
 
-          ./gradlew -PreleaseVersion="${RELEASE_VERSION}" clean test build
+          ./gradlew clean test build
           EXPECTED_JAR="build/libs/lastseen-discord-${RELEASE_VERSION}.jar"
           if [[ ! -f "${EXPECTED_JAR}" ]]; then
             echo "Expected plugin artifact ${EXPECTED_JAR} was not produced." >&2
