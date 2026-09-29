@@ -4,7 +4,7 @@ LastSeenDiscord is a Paper plugin that maintains a Discord webhook message showi
 
 ## Requirements
 
-- Paper 26.2
+- Paper 26.3 (beta channel)
 - Java 25
 - A Discord channel in which you can create a webhook
 
@@ -71,13 +71,14 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 
 ## Updating from an older version
 
-1. Stop the server.
-2. Back up `plugins/LastSeenDiscord`.
-3. Replace the old JAR with the new release JAR.
-4. Start the server and confirm that `message-state.json` was created if the plugin already managed Discord messages.
-5. Run `/lsd sync` and verify that the existing Discord messages update instead of being duplicated.
+1. Update the server to Paper 26.3 beta if it is still running Paper 26.2 or earlier.
+2. Stop the server.
+3. Back up `plugins/LastSeenDiscord`.
+4. Replace the old JAR with the new release JAR.
+5. Start the server and confirm that `message-state.json` was created if the plugin already managed Discord messages.
+6. Run `/lsd sync` and verify that the existing Discord messages update instead of being duplicated.
 
-Existing configuration keys remain compatible with version 1.1.1. Newer options such as `updates.event-debounce-seconds` use their documented defaults when absent from an older configuration file. The legacy `discord.include-last-login-date` setting is still recognized when `discord.include-last-seen-date` is not explicitly set.
+Version 1.2.0 raises the supported server baseline to Paper 26.3 beta while retaining Java 25. Existing 1.1.x configuration keys remain compatible with 1.2.0. Newer options such as `updates.event-debounce-seconds` and the player filters use their documented defaults when absent from an older configuration file. The legacy `discord.include-last-login-date` setting is still recognized when `discord.include-last-seen-date` is not explicitly set.
 
 ## Troubleshooting
 
