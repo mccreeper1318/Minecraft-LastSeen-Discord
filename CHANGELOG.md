@@ -2,7 +2,7 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
-## [1.1.3]
+## [1.2.0]
 
 ### Added
 
@@ -10,7 +10,14 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ### Changed
 
-- Bumped actions/setup-java from 6.0.0 to 6.0.1
+- Target the Paper 26.3 beta API and declare `api-version: '26.3'` for the plugin.
+- Replace deprecated `JavaPlugin#getDescription()` metadata access with `JavaPlugin#getPluginMeta()` when constructing the Discord HTTP user agent.
+- Bumped actions/setup-java from 6.0.0 to 6.0.1.
+
+### Dependencies
+
+- Update `io.papermc.paper:paper-api` to `26.3.build.136-beta`.
+- Update `gradle-wrapper` to `9.8.0`.
 
 ## [1.1.2]
 
