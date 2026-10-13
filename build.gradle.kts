@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.pinnaclesmp"
-version = "1.1.2"
+version = "1.2.0"
 
 repositories {
     mavenCentral()
@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.2.build.121-stable")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.178-stable")
     implementation("com.google.code.gson:gson:2.14.0")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))

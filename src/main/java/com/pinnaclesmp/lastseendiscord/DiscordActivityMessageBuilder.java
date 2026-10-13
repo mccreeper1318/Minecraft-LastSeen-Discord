@@ -21,10 +21,14 @@ final class DiscordActivityMessageBuilder {
 
         List<PlayerStatus> statuses = new ArrayList<>(players.size());
         for (PlayerActivity player : players) {
+            boolean active = player.activityTime() >= activeThreshold;
+            if (!settings.activityFilter().includes(active)) {
+                continue;
+            }
             statuses.add(new PlayerStatus(
                     player.name(),
                     player.activityTime(),
-                    player.activityTime() >= activeThreshold
+                    active
             ));
         }
         statuses.sort(Comparator.comparing(PlayerStatus::name, String.CASE_INSENSITIVE_ORDER));
@@ -120,14 +124,28 @@ final class DiscordActivityMessageBuilder {
             int inactiveAfterDays,
             boolean includeActivityDate,
             String timestampSourceDisplayName,
-            String header
+            String header,
+            ValidatedConfiguration.ActivityFilter activityFilter
     ) {
+        Settings(int inactiveAfterDays, boolean includeActivityDate, String timestampSourceDisplayName, String header) {
+            this(
+                    inactiveAfterDays,
+                    includeActivityDate,
+                    timestampSourceDisplayName,
+                    header,
+                    ValidatedConfiguration.ActivityFilter.ALL
+            );
+        }
+
         Settings {
             inactiveAfterDays = Math.max(1, inactiveAfterDays);
             timestampSourceDisplayName = timestampSourceDisplayName == null
                     ? "last seen"
                     : timestampSourceDisplayName;
             header = header == null ? "" : header.trim();
+            activityFilter = activityFilter == null
+                    ? ValidatedConfiguration.ActivityFilter.ALL
+                    : activityFilter;
         }
     }
 

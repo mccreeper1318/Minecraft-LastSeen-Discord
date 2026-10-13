@@ -2,6 +2,28 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
+## [1.2.0]
+
+### Added
+
+- Add composable player filters for whitelist-only output, case-insensitive name exclusions, UUID exclusions that survive name changes, and ALL/ACTIVE/INACTIVE activity filtering. Filtering is applied before Discord pagination.
+
+### Changed
+
+- Target the Paper 26.3 stable API and declare `api-version: '26.3'` for the plugin.
+- Refresh the pinned Paper 26.3 API from beta build 136 through beta build 159, then to stable build 178.
+- Replace deprecated `JavaPlugin#getDescription()` metadata access with `JavaPlugin#getPluginMeta()` when constructing the Discord HTTP user agent.
+- Bumped `actions/setup-java` from `6.0.0` to `6.0.1`, and `gradle/actions/setup-gradle` from `6.3.0` to `6.4.0` in the github-actions group.
+
+### Fixed
+
+- Allow release tags with prerelease suffixes such as `1.2.0-beta.1` when their base version matches the project version, and build prerelease JAR/plugin metadata using the full prerelease version.
+
+### Dependencies
+
+- Update `io.papermc.paper:paper-api` to `26.3.build.178-stable`.
+- Update `gradle-wrapper` to `9.8.0`.
+
 ## [1.1.2]
 
 ### Fixed

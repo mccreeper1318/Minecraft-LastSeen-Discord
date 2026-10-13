@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 final class ValidatedConfiguration {
@@ -23,6 +24,10 @@ final class ValidatedConfiguration {
     private final boolean includeActivityDate;
     private final int inactiveAfterDays;
     private final TimestampSource timestampSource;
+    private final boolean whitelistOnly;
+    private final Set<UUID> excludedPlayerUuids;
+    private final Set<String> excludedPlayerNames;
+    private final ActivityFilter activityFilter;
     private final long intervalMinutes;
     private final boolean updateOnJoin;
     private final boolean updateOnQuit;
@@ -38,6 +43,10 @@ final class ValidatedConfiguration {
             boolean includeActivityDate,
             int inactiveAfterDays,
             TimestampSource timestampSource,
+            boolean whitelistOnly,
+            Set<UUID> excludedPlayerUuids,
+            Set<String> excludedPlayerNames,
+            ActivityFilter activityFilter,
             long intervalMinutes,
             boolean updateOnJoin,
             boolean updateOnQuit,
@@ -52,6 +61,10 @@ final class ValidatedConfiguration {
         this.includeActivityDate = includeActivityDate;
         this.inactiveAfterDays = inactiveAfterDays;
         this.timestampSource = timestampSource;
+        this.whitelistOnly = whitelistOnly;
+        this.excludedPlayerUuids = Set.copyOf(excludedPlayerUuids);
+        this.excludedPlayerNames = Set.copyOf(excludedPlayerNames);
+        this.activityFilter = activityFilter;
         this.intervalMinutes = intervalMinutes;
         this.updateOnJoin = updateOnJoin;
         this.updateOnQuit = updateOnQuit;
@@ -73,6 +86,10 @@ final class ValidatedConfiguration {
                 warningSink
         );
         TimestampSource timestampSource = readTimestampSource(values, warningSink);
+        boolean whitelistOnly = readBoolean(values, "filters.whitelist-only", false, warningSink);
+        Set<UUID> excludedPlayerUuids = readExcludedPlayerUuids(values, warningSink);
+        Set<String> excludedPlayerNames = readExcludedPlayerNames(values, warningSink);
+        ActivityFilter activityFilter = readActivityFilter(values, warningSink);
         long intervalMinutes = readWholeNumber(
                 values,
                 "updates.interval-minutes",
@@ -102,6 +119,10 @@ final class ValidatedConfiguration {
                 includeActivityDate,
                 inactiveAfterDays,
                 timestampSource,
+                whitelistOnly,
+                excludedPlayerUuids,
+                excludedPlayerNames,
+                activityFilter,
                 intervalMinutes,
                 updateOnJoin,
                 updateOnQuit,
@@ -232,6 +253,77 @@ final class ValidatedConfiguration {
         }
     }
 
+    private static Set<UUID> readExcludedPlayerUuids(Values values, Consumer<String> warningSink) {
+        Object raw = values.get("filters.excluded-uuids");
+        if (raw == null) {
+            return Set.of();
+        }
+        if (!(raw instanceof List<?> entries)) {
+            warningSink.accept("filters.excluded-uuids must be a list of UUID strings; using an empty exclusion list.");
+            return Set.of();
+        }
+
+        Set<UUID> result = new LinkedHashSet<>();
+        boolean ignoredEntry = false;
+        for (Object entry : entries) {
+            if (!(entry instanceof String stringValue) || stringValue.isBlank()) {
+                ignoredEntry = true;
+                continue;
+            }
+            try {
+                result.add(UUID.fromString(stringValue.trim()));
+            } catch (IllegalArgumentException ex) {
+                ignoredEntry = true;
+            }
+        }
+        if (ignoredEntry) {
+            warningSink.accept("filters.excluded-uuids contains invalid entries; those entries will be ignored.");
+        }
+        return Set.copyOf(result);
+    }
+
+    private static Set<String> readExcludedPlayerNames(Values values, Consumer<String> warningSink) {
+        Object raw = values.get("filters.excluded-names");
+        if (raw == null) {
+            return Set.of();
+        }
+        if (!(raw instanceof List<?> entries)) {
+            warningSink.accept("filters.excluded-names must be a list of player names; using an empty exclusion list.");
+            return Set.of();
+        }
+
+        Set<String> result = new LinkedHashSet<>();
+        boolean ignoredEntry = false;
+        for (Object entry : entries) {
+            if (!(entry instanceof String stringValue) || stringValue.isBlank()) {
+                ignoredEntry = true;
+                continue;
+            }
+            result.add(stringValue.trim().toLowerCase(Locale.ROOT));
+        }
+        if (ignoredEntry) {
+            warningSink.accept("filters.excluded-names contains invalid entries; those entries will be ignored.");
+        }
+        return Set.copyOf(result);
+    }
+
+    private static ActivityFilter readActivityFilter(Values values, Consumer<String> warningSink) {
+        Object raw = values.get("filters.activity");
+        if (raw == null) {
+            return ActivityFilter.ALL;
+        }
+        if (!(raw instanceof String stringValue) || stringValue.isBlank()) {
+            warningSink.accept("filters.activity must be ALL, ACTIVE, or INACTIVE; using ALL.");
+            return ActivityFilter.ALL;
+        }
+        try {
+            return ActivityFilter.valueOf(stringValue.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            warningSink.accept("filters.activity must be ALL, ACTIVE, or INACTIVE; using ALL.");
+            return ActivityFilter.ALL;
+        }
+    }
+
     private static List<String> readLegacyMessageIds(Values values, Consumer<String> warningSink) {
         List<String> configuredList = new ArrayList<>();
         Object rawList = values.get("discord.message-ids");
@@ -317,6 +409,20 @@ final class ValidatedConfiguration {
         return timestampSource;
     }
 
+    boolean includesPlayer(UUID uuid, String name, boolean whitelisted) {
+        if (whitelistOnly && !whitelisted) {
+            return false;
+        }
+        if (uuid != null && excludedPlayerUuids.contains(uuid)) {
+            return false;
+        }
+        return name == null || !excludedPlayerNames.contains(name.trim().toLowerCase(Locale.ROOT));
+    }
+
+    ActivityFilter activityFilter() {
+        return activityFilter;
+    }
+
     long intervalMinutes() {
         return intervalMinutes;
     }
@@ -339,6 +445,29 @@ final class ValidatedConfiguration {
 
     List<String> legacyMessageIds() {
         return legacyMessageIds;
+    }
+
+    enum ActivityFilter {
+        ALL {
+            @Override
+            boolean includes(boolean active) {
+                return true;
+            }
+        },
+        ACTIVE {
+            @Override
+            boolean includes(boolean active) {
+                return active;
+            }
+        },
+        INACTIVE {
+            @Override
+            boolean includes(boolean active) {
+                return !active;
+            }
+        };
+
+        abstract boolean includes(boolean active);
     }
 
     enum TimestampSource {

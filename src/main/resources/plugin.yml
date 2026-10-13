@@ -1,7 +1,7 @@
 name: LastSeenDiscord
 version: ${version}
 main: com.pinnaclesmp.lastseendiscord.LastSeenDiscordPlugin
-api-version: '26.2'
+api-version: '26.3'
 author: Kevin
 website: https://pinnaclesmp.org
 description: Syncs server member activity status to Discord.

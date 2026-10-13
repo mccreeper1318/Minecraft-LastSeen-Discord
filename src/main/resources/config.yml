@@ -19,6 +19,16 @@ activity:
   # Use LAST_LOGIN if you specifically want the login timestamp instead.
   timestamp-source: "LAST_SEEN"
 
+filters:
+  # If true, only players currently present in the server whitelist are shown.
+  whitelist-only: false
+  # UUID exclusions remain effective if a player changes their Minecraft name.
+  excluded-uuids: []
+  # Name exclusions are case-insensitive. UUID exclusions are recommended for long-term use.
+  excluded-names: []
+  # Valid values are ALL, ACTIVE, and INACTIVE.
+  activity: "ALL"
+
 updates:
   # Valid range is 1-525600 minutes (up to one year). Out-of-range values are clamped.
   interval-minutes: 1440

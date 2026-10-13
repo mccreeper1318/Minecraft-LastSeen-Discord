@@ -4,7 +4,7 @@ LastSeenDiscord is a Paper plugin that maintains a Discord webhook message showi
 
 ## Requirements
 
-- Paper 26.2
+- Paper 26.3
 - Java 25
 - A Discord channel in which you can create a webhook
 
@@ -39,6 +39,10 @@ Both commands require `lastseendiscord.admin`, which defaults to server operator
 | `discord.include-last-seen-date` | `false` | Adds a `YYYY-MM-DD` activity date to each player. |
 | `activity.inactive-after-days` | `30` | Number of days without activity before a player is marked inactive. Values below `1` are normalized to `1`. |
 | `activity.timestamp-source` | `LAST_SEEN` | Uses `LAST_SEEN` or `LAST_LOGIN`, with the other timestamp as a compatibility fallback. Invalid values use `LAST_SEEN`. |
+| `filters.whitelist-only` | `false` | When enabled, only players currently present in the Minecraft whitelist are included. |
+| `filters.excluded-uuids` | `[]` | UUIDs to exclude. UUID exclusions remain effective across Minecraft name changes. |
+| `filters.excluded-names` | `[]` | Player names to exclude, matched case-insensitively. UUID exclusions are preferred for long-term exclusions. |
+| `filters.activity` | `ALL` | Controls activity-state filtering: `ALL`, `ACTIVE`, or `INACTIVE`. |
 | `updates.interval-minutes` | `1440` | Automatic synchronization interval. Valid range is `1`-`525600` minutes; out-of-range values are clamped. |
 | `updates.update-on-join` | `true` | Requests an update when a player joins. Join/quit requests are debounced together. |
 | `updates.update-on-quit` | `true` | Requests an update when a player leaves. Join/quit requests are debounced together. |
@@ -46,6 +50,8 @@ Both commands require `lastseendiscord.admin`, which defaults to server operator
 | `updates.event-debounce-seconds` | `5` | Trailing-edge debounce window for join/quit updates. Valid range is `0`-`60` seconds; values are clamped to that range and `0` disables debouncing. |
 
 Every supported setting is validated at startup and again by `/lsd reload`. Invalid scalar values produce field-specific warnings and use a safe default or boundary value where possible. Webhook validation messages never include the configured webhook URL or token.
+
+Player filters are composable. For example, `filters.whitelist-only: true` can be combined with UUID/name exclusions and `filters.activity: INACTIVE` to show only inactive whitelisted members after exclusions. Filtering is applied before Discord message pagination, so page creation/removal reflects only the final filtered player set. Existing installations keep the previous behavior because all filter defaults include every known player.
 
 The deprecated `discord.message-ids` and `discord.message-id` values are retained only to migrate installations upgrading from version 1.1.0 or earlier. Malformed or duplicate legacy IDs are ignored and reported during validation. Version 1.1.1 and later store generated message IDs in `message-state.json`; malformed or duplicate IDs in that runtime-state file cause synchronization to fail closed instead of entering active state. Do not edit `message-state.json` while the server is running.
 
@@ -66,12 +72,13 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 ## Updating from an older version
 
 1. Stop the server.
-2. Back up `plugins/LastSeenDiscord`.
-3. Replace the old JAR with the new release JAR.
-4. Start the server and confirm that `message-state.json` was created if the plugin already managed Discord messages.
-5. Run `/lsd sync` and verify that the existing Discord messages update instead of being duplicated.
+2. Update the server to Paper 26.3 if it is still running Paper 26.2 or earlier.
+3. Back up `plugins/LastSeenDiscord`.
+4. Replace the old JAR with the new release JAR.
+5. Start the server and confirm that `message-state.json` was created if the plugin already managed Discord messages.
+6. Run `/lsd sync` and verify that the existing Discord messages update instead of being duplicated.
 
-Existing configuration keys remain compatible with version 1.1.1. Newer options such as `updates.event-debounce-seconds` use their documented defaults when absent from an older configuration file. The legacy `discord.include-last-login-date` setting is still recognized when `discord.include-last-seen-date` is not explicitly set.
+Version 1.2.0 raises the supported server baseline to Paper 26.3 while retaining Java 25. Existing 1.1.x configuration keys remain compatible with 1.2.0. Newer options such as `updates.event-debounce-seconds` and the player filters use their documented defaults when absent from an older configuration file. The legacy `discord.include-last-login-date` setting is still recognized when `discord.include-last-seen-date` is not explicitly set.
 
 ## Troubleshooting
 

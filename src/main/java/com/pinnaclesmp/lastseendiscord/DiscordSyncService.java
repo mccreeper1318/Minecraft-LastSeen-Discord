@@ -49,7 +49,7 @@ public final class DiscordSyncService {
             }
         }
 
-        String userAgent = plugin.getDescription().getName() + "/" + plugin.getDescription().getVersion();
+        String userAgent = plugin.getPluginMeta().getName() + "/" + plugin.getPluginMeta().getVersion();
         this.webhookClient = new DiscordWebhookClient(userAgent);
     }
 
@@ -251,6 +251,13 @@ public final class DiscordSyncService {
             if (name == null || name.isBlank()) {
                 continue;
             }
+            if (!configuration.includesPlayer(
+                    offlinePlayer.getUniqueId(),
+                    name,
+                    offlinePlayer.isWhitelisted()
+            )) {
+                continue;
+            }
 
             long activityTime = resolveActivityTime(offlinePlayer, configuration.timestampSource());
             if (activityTime <= 0L) {
@@ -271,7 +278,8 @@ public final class DiscordSyncService {
                         configuration.inactiveAfterDays(),
                         configuration.includeActivityDate(),
                         configuration.timestampSource().displayName(),
-                        configuration.header()
+                        configuration.header(),
+                        configuration.activityFilter()
                 ),
                 List.copyOf(players),
                 capturedAtMillis
