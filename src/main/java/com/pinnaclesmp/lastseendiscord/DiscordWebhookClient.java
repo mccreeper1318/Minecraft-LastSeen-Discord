@@ -75,6 +75,12 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         }
     }
 
+    void test(WebhookEndpoint endpoint) throws IOException, InterruptedException {
+        HttpRequest request = baseRequest(endpoint.testUri()).GET().build();
+        HttpResponse<String> response = send(request, "test the Discord webhook", false);
+        ensureSuccess(response, "test the Discord webhook");
+    }
+
     void shutdown() {
         httpClient.shutdownNow();
     }
