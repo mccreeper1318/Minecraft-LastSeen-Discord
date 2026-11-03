@@ -8,10 +8,34 @@ description: Syncs server member activity status to Discord.
 commands:
   lastseendiscord:
     description: Manages LastSeenDiscord configuration and synchronization.
-    usage: /<command> reload|sync|recover-create
-    permission: lastseendiscord.admin
+    usage: /<command> <help|reload|sync|status|test|recover-create|reset>
     aliases: [lsd]
 permissions:
   lastseendiscord.admin:
-    description: Allows reloading and syncing LastSeenDiscord.
+    description: Grants all LastSeenDiscord administrative commands.
     default: op
+    children:
+      lastseendiscord.reload: true
+      lastseendiscord.sync: true
+      lastseendiscord.status: true
+      lastseendiscord.test: true
+      lastseendiscord.recover: true
+      lastseendiscord.reset: true
+  lastseendiscord.reload:
+    description: Allows reloading LastSeenDiscord configuration.
+    default: false
+  lastseendiscord.sync:
+    description: Allows requesting an immediate Discord synchronization.
+    default: false
+  lastseendiscord.status:
+    description: Allows viewing LastSeenDiscord synchronization status.
+    default: false
+  lastseendiscord.test:
+    description: Allows testing the configured Discord webhook.
+    default: false
+  lastseendiscord.recover:
+    description: Allows recovering from an ambiguous Discord message create.
+    default: false
+  lastseendiscord.reset:
+    description: Allows resetting tracked Discord message state.
+    default: false
