@@ -93,6 +93,19 @@ class DiscordWebhookClientHttpIntegrationTest {
     }
 
     @Test
+    void webhookTestUsesNonMutatingGetWithoutThreadOrWaitQuery() throws Exception {
+        script(200, "{\"id\":\"" + WEBHOOK_ID + "\"}");
+
+        client.test(endpoint);
+
+        CapturedRequest request = onlyRequest();
+        assertEquals("GET", request.method());
+        assertEquals("/api/webhooks/" + WEBHOOK_ID + "/test_token", request.uri().getPath());
+        assertEquals(null, request.uri().getRawQuery());
+        assertEquals("", request.body());
+    }
+
+    @Test
     void editTreatsDiscordUnknownMessageResponseAsMissing() throws Exception {
         script(404, "{\"message\":\"Unknown Message\",\"code\":10008}");
 
