@@ -105,6 +105,47 @@ class WebhookStateManagerTest {
     }
 
     @Test
+    void resetTrackedMessagesClearsIdsAndAmbiguousCreateBlock() throws Exception {
+        MessageStateStore store = new MessageStateStore(temporaryDirectory.resolve("message-state.json"));
+        store.save(List.of("333333333333333333"), false, OLD_IDENTITY);
+        WebhookStateManager manager = new WebhookStateManager(store, store.load());
+        manager.advanceConfiguration(OLD_IDENTITY, true);
+
+        WebhookStateManager.Snapshot snapshot = manager.snapshot();
+        DiscordMessageSynchronizer.MessageState state = manager.bind(
+                snapshot.generation(),
+                snapshot.webhookIdentity()
+        );
+        state.blockCreate(List.of("333333333333333333"));
+        assertTrue(manager.snapshot().createOutcomeUnknown());
+
+        assertEquals(1, manager.resetTrackedMessages(OLD_IDENTITY));
+
+        WebhookStateManager.Snapshot reset = manager.snapshot();
+        assertEquals(List.of(), reset.messageIds());
+        assertFalse(reset.createOutcomeUnknown());
+        assertFalse(reset.createInProgress());
+
+        MessageStateStore.State persisted = store.load();
+        assertEquals(List.of(), persisted.messageIds());
+        assertFalse(persisted.createOutcomeUnknown());
+        assertEquals(OLD_IDENTITY, persisted.webhookIdentity());
+    }
+
+    @Test
+    void resetTrackedMessagesRejectsCreateInProgress() throws Exception {
+        MessageStateStore store = new MessageStateStore(temporaryDirectory.resolve("message-state.json"));
+        store.save(List.of(), false, OLD_IDENTITY);
+        WebhookStateManager manager = new WebhookStateManager(store, store.load());
+        manager.advanceConfiguration(OLD_IDENTITY, true);
+
+        WebhookStateManager.Snapshot snapshot = manager.snapshot();
+        manager.bind(snapshot.generation(), snapshot.webhookIdentity()).beginCreate(List.of());
+
+        assertThrows(SyncException.class, () -> manager.resetTrackedMessages(OLD_IDENTITY));
+    }
+
+    @Test
     void shutdownDuringCreateRejectsLateRequestCompletion() throws Exception {
         MessageStateStore store = new MessageStateStore(temporaryDirectory.resolve("message-state.json"));
         store.save(List.of(), false, OLD_IDENTITY);

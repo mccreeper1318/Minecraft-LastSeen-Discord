@@ -46,6 +46,10 @@ final class SyncRequestQueue {
         workerOwned = false;
     }
 
+    synchronized Snapshot snapshot() {
+        return new Snapshot(workerOwned, pending, stopped);
+    }
+
     synchronized boolean isStopped() {
         return stopped;
     }
@@ -57,5 +61,8 @@ final class SyncRequestQueue {
     }
 
     record Work(String reason) {
+    }
+
+    record Snapshot(boolean workerOwned, boolean pending, boolean stopped) {
     }
 }

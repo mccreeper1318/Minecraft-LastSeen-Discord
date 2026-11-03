@@ -4,6 +4,10 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ## [1.2.1]
 
+### Added
+
+- Add sync status, safe webhook test, and confirmed message-state reset commands with permissions and tab completion.
+
 ### Dependencies
 
 - Update Gson to `2.15.0` and Gradle to `9.8.2`.
