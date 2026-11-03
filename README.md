@@ -20,15 +20,20 @@ LastSeenDiscord is a Paper plugin that maintains a Discord webhook message showi
 
 Treat the Discord webhook URL like a password. Anyone who has it can post through that webhook, so do not publish `config.yml` or paste an unredacted URL into logs or support messages.
 
-## Commands and permission
+## Commands and permissions
 
-| Command | Purpose |
-|---|---|
-| `/lsd sync` | Queue an immediate Discord update, bypassing the join/quit debounce window. |
-| `/lsd reload` | Reload and validate `config.yml`, restart the automatic schedule, and queue an update. |
-| `/lsd recover-create confirm` | Resume message creation after an ambiguous Discord response. Check the channel and remove any untracked duplicate page before confirming. |
+| Command | Permission | Purpose |
+|---|---|---|
+| `/lsd status` | `lastseendiscord.status` | Show sync state, last attempt/success, queue/retry state, and tracked page count without exposing webhook secrets. |
+| `/lsd test` | `lastseendiscord.test` | Perform a non-mutating GET check of the configured webhook. It does not create, edit, or delete messages. |
+| `/lsd sync` | `lastseendiscord.sync` | Queue an immediate Discord update, bypassing the join/quit debounce window. |
+| `/lsd reload` | `lastseendiscord.reload` | Reload and validate `config.yml`, restart the automatic schedule, and queue an update. |
+| `/lsd recover-create confirm` | `lastseendiscord.recover` | Resume message creation after an ambiguous Discord response. Check the channel and remove any untracked duplicate page before confirming. |
+| `/lsd reset messages confirm` | `lastseendiscord.reset` | Forget all tracked Discord page IDs after reconciling the old pages. This does not delete Discord messages or automatically sync. |
 
-Both commands require `lastseendiscord.admin`, which defaults to server operators. `/lastseendiscord` is the full command name.
+`lastseendiscord.admin` grants all LastSeenDiscord commands and defaults to server operators. Individual command permissions default to false and can be granted separately. `/lastseendiscord` is the full command name. The command includes permission-aware help and tab completion.
+
+The reset command is intentionally guarded. Before running it, reconcile or delete the old managed Discord pages; otherwise a later sync can create duplicate pages because the plugin no longer knows their IDs.
 
 ## Configuration
 
