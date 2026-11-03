@@ -2,6 +2,13 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
+## [1.2.1]
+
+### Dependencies
+
+- Update Gson to `2.15.0` and Gradle to `9.8.2`.
+- Update GitHub Actions dependencies.
+
 ## [1.2.0]
 
 ### Added
