@@ -7,6 +7,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 ### Added
 
 - Add sync status, safe webhook test, and confirmed message-state reset commands with permissions and tab completion.
+- Add optional page numbers, repeated headings, and filtered activity summaries for multi-message Discord output.
 
 ### Dependencies
 
