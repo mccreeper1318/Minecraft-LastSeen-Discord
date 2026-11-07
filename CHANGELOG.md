@@ -16,6 +16,7 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ### Dependencies
 
+- Update Paper API to `26.3.build.244-stable`.
 - Update Gson to `2.15.0` and Gradle to `9.8.2`.
 - Update GitHub Actions dependencies.
 
