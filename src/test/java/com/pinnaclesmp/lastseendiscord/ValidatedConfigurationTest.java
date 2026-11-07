@@ -97,6 +97,9 @@ class ValidatedConfigurationTest {
         assertFalse(configuration.repeatHeader());
         assertFalse(configuration.showSummary());
         assertEquals(ValidatedConfiguration.TimestampSource.LAST_SEEN, configuration.timestampSource());
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE, configuration.activityTimezone().getId());
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, configuration.activityDateFormat());
+        assertEquals(ValidatedConfiguration.ActivityDateDisplay.DATE, configuration.activityDateDisplay());
         assertEquals(ValidatedConfiguration.DEFAULT_INACTIVE_AFTER_DAYS, configuration.inactiveAfterDays());
         assertEquals(60L, configuration.intervalMinutes());
         assertEquals(ValidatedConfiguration.DEFAULT_EVENT_DEBOUNCE_SECONDS, configuration.eventDebounceSeconds());
@@ -110,6 +113,61 @@ class ValidatedConfigurationTest {
                 false
         ));
         assertEquals(ValidatedConfiguration.ActivityFilter.ALL, configuration.activityFilter());
+    }
+
+    @Test
+    void parsesActivityTimezoneFormatAndDiscordDisplayMode() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("activity.timezone", "America/New_York");
+        raw.put("activity.date-format", "uuuu-MM-dd HH:mm xxx");
+        raw.put("activity.date-display", "discord");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertEquals("America/New_York", configuration.activityTimezone().getId());
+        assertEquals("uuuu-MM-dd HH:mm xxx", configuration.activityDateFormat());
+        assertEquals(ValidatedConfiguration.ActivityDateDisplay.DISCORD, configuration.activityDateDisplay());
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test
+    void invalidActivityDateSettingsFallBackWithActionableWarnings() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("activity.timezone", "Not/A_Real_Zone");
+        raw.put("activity.date-format", "[");
+        raw.put("activity.date-display", "native");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE, configuration.activityTimezone().getId());
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, configuration.activityDateFormat());
+        assertEquals(ValidatedConfiguration.ActivityDateDisplay.DATE, configuration.activityDateDisplay());
+        assertWarningFor(warnings, "activity.timezone");
+        assertWarningFor(warnings, "activity.date-format");
+        assertWarningFor(warnings, "activity.date-display");
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("America/New_York")));
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("uuuu-MM-dd")));
+    }
+
+    @Test
+    void rejectsUnsafeOrOversizedActivityDatePatterns() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("activity.date-format", "uuuu-MM-dd\nHH:mm");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, configuration.activityDateFormat());
+        assertWarningFor(warnings, "activity.date-format");
+
+        raw.put("activity.date-format", "y".repeat(81));
+        warnings.clear();
+        configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, configuration.activityDateFormat());
+        assertWarningFor(warnings, "activity.date-format");
     }
 
     @Test
