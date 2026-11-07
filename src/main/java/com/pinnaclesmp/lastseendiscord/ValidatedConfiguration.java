@@ -318,7 +318,8 @@ final class ValidatedConfiguration {
         String timezone = stringValue.trim();
         try {
             ZoneId zoneId = ZoneId.of(timezone);
-            if (!ZoneId.getAvailableZoneIds().contains(zoneId.getId())) {
+            if (!DEFAULT_ACTIVITY_TIMEZONE.equals(zoneId.getId())
+                    && !ZoneId.getAvailableZoneIds().contains(zoneId.getId())) {
                 throw new DateTimeException("Timezone is not an IANA region ID.");
             }
             return zoneId;
