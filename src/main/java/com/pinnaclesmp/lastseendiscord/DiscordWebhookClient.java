@@ -174,7 +174,8 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
     }
 
     private String jsonBody(String content) {
-        return "{\"content\":\"" + escapeJson(content) + "\"}";
+        return "{\"content\":\"" + escapeJson(content)
+                + "\",\"allowed_mentions\":{\"parse\":[]}}";
     }
 
     private String escapeJson(String value) {
