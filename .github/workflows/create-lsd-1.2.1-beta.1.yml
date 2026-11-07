@@ -1,0 +1,45 @@
+name: Create LSD 1.2.1 Beta 1 prerelease
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - ".github/workflows/create-lsd-1.2.1-beta.1.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  create-prerelease:
+    if: github.event.head_commit.message == 'Create LSD 1.2.1 Beta 1 prerelease'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "1.2.1-beta.1" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "1afe53165fb365872d84b3f09daa81367b2a6315" \
+            --title "LSD 1.2.1 Beta 1" \
+            --prerelease \
+            --notes-file - <<'EOF'
+          ## 1.2.1
+
+          ### Security
+          - Disabled Discord mentions in webhook messages.
+
+          ### Added
+          - Added sync status, webhook test, and message-state reset commands.
+          - Added command permissions and tab completion.
+          - Added optional page numbers, repeated headings, and activity summaries.
+          - Added configurable activity timezone and date formatting.
+          - Added Discord-native activity timestamps.
+
+          ### Dependencies
+          - Updated Paper API to `26.3.build.244-stable`.
+          - Updated Gson to `2.15.0`.
+          - Updated Gradle to `9.8.2`.
+          - Updated GitHub Actions dependencies.
+          EOF
