@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.3.build.178-stable")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.244-stable")
     implementation("com.google.code.gson:gson:2.15.0")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
