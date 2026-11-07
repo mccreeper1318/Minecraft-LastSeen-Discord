@@ -3,6 +3,8 @@ package com.pinnaclesmp.lastseendiscord;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -184,6 +186,73 @@ class DiscordActivityMessageBuilderTest {
         assertTrue(chunks.size() > 1);
         assertTrue(chunks.stream().allMatch(chunk -> chunk.length() <= DiscordActivityMessageBuilder.DISCORD_CHUNK_MAX));
         assertTrue(chunks.getFirst().startsWith("H".repeat(253) + "..."));
+    }
+
+    @Test
+    void formatsConfiguredTimezoneAcrossDaylightSavingFallback() {
+        long firstOccurrence = Instant.parse("2026-11-01T05:30:00Z").toEpochMilli();
+        long secondOccurrence = Instant.parse("2026-11-01T06:30:00Z").toEpochMilli();
+        long capturedAtMillis = Instant.parse("2026-11-01T07:00:00Z").toEpochMilli();
+
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                true,
+                "last seen",
+                "DST test",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                false,
+                false,
+                false,
+                ZoneId.of("America/New_York"),
+                "uuuu-MM-dd HH:mm xxx",
+                ValidatedConfiguration.ActivityDateDisplay.DATE
+        );
+
+        List<DiscordActivityMessageBuilder.PlayerActivity> players = List.of(
+                new DiscordActivityMessageBuilder.PlayerActivity("BeforeFallback", firstOccurrence),
+                new DiscordActivityMessageBuilder.PlayerActivity("AfterFallback", secondOccurrence)
+        );
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(settings, players, capturedAtMillis)
+        );
+
+        assertTrue(rendered.contains("BeforeFallback (active) — 2026-11-01 01:30 -04:00"));
+        assertTrue(rendered.contains("AfterFallback (active) — 2026-11-01 01:30 -05:00"));
+    }
+
+    @Test
+    void rendersDiscordNativeTimestampFromExactEpochSecond() {
+        long activityMillis = Instant.parse("2026-03-08T07:30:00.999Z").toEpochMilli();
+        long capturedAtMillis = Instant.parse("2026-03-08T08:00:00Z").toEpochMilli();
+        long epochSeconds = activityMillis / 1000L;
+
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                true,
+                "last seen",
+                "Discord timestamp test",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                false,
+                false,
+                false,
+                ZoneId.of("America/New_York"),
+                "uuuu-MM-dd HH:mm",
+                ValidatedConfiguration.ActivityDateDisplay.DISCORD
+        );
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(
+                        settings,
+                        List.of(new DiscordActivityMessageBuilder.PlayerActivity("TimestampPlayer", activityMillis)),
+                        capturedAtMillis
+                )
+        );
+
+        assertTrue(rendered.contains("TimestampPlayer (active) — <t:" + epochSeconds + ":F>"));
+        assertFalse(rendered.contains("2026-03-08 03:30"));
     }
 
     private static int occurrences(String value, String target) {
