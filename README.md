@@ -77,6 +77,7 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 - If the debounced activity request fires while a synchronization is already running, it is coalesced into the guaranteed follow-up pass rather than being lost.
 - `/lsd sync` is always immediate and bypasses the event debounce. It does not cancel a still-pending event debounce, so a later activity pass can still run if player activity was already waiting to be synchronized.
 - Discord requests run asynchronously and have finite connection and request timeouts.
+- Webhook create/edit payloads explicitly disable all Discord mentions, so configured headings or other rendered text cannot ping users, roles, `@everyone`, or `@here`.
 - Requests made during an active synchronization are coalesced into a guaranteed follow-up pass.
 - Discord rate limits, temporary network errors, and server errors retry with bounded exponential backoff.
 - A create request whose delivery cannot be determined is never retried automatically. The durable safety block prevents later scheduled updates and restarts from creating another page until an administrator resolves it.
