@@ -223,6 +223,37 @@ class DiscordActivityMessageBuilderTest {
     }
 
     @Test
+    void fallsBackAtRuntimeIfDatePatternFailsForAPlayerTimestamp() {
+        long activityMillis = Instant.parse("2026-01-01T12:30:00Z").toEpochMilli();
+        long capturedAtMillis = Instant.parse("2026-01-01T13:00:00Z").toEpochMilli();
+
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                true,
+                "last seen",
+                "Runtime fallback",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                false,
+                false,
+                false,
+                ZoneId.of("UTC"),
+                "uuuu-MM-dd pH:mm",
+                ValidatedConfiguration.ActivityDateDisplay.DATE
+        );
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(
+                        settings,
+                        List.of(new DiscordActivityMessageBuilder.PlayerActivity("FallbackPlayer", activityMillis)),
+                        capturedAtMillis
+                )
+        );
+
+        assertTrue(rendered.contains("FallbackPlayer (active) — 2026-01-01"));
+    }
+
+    @Test
     void rendersDiscordNativeTimestampFromExactEpochSecond() {
         long activityMillis = Instant.parse("2026-03-08T07:30:00.999Z").toEpochMilli();
         long capturedAtMillis = Instant.parse("2026-03-08T08:00:00Z").toEpochMilli();
