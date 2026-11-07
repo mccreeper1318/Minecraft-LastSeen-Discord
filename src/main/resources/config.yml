@@ -25,6 +25,13 @@ activity:
   # LAST_SEEN is recommended because it treats online players as active now.
   # Use LAST_LOGIN if you specifically want the login timestamp instead.
   timestamp-source: "LAST_SEEN"
+  # IANA timezone used when date-display is DATE. UTC is the deterministic default.
+  # Examples: UTC, America/New_York, Europe/London.
+  timezone: "UTC"
+  # Java DateTimeFormatter pattern used when date-display is DATE.
+  date-format: "uuuu-MM-dd"
+  # DATE uses timezone/date-format. DISCORD uses Discord's localized <t:epoch:F> timestamp.
+  date-display: "DATE"
 
 filters:
   # If true, only players currently present in the server whitelist are shown.
