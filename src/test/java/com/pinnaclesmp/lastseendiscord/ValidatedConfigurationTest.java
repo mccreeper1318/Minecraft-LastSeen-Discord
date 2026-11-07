@@ -135,7 +135,7 @@ class ValidatedConfigurationTest {
     void invalidActivityDateSettingsFallBackWithActionableWarnings() {
         Map<String, Object> raw = new HashMap<>();
         raw.put("activity.timezone", "Not/A_Real_Zone");
-        raw.put("activity.date-format", "[");
+        raw.put("activity.date-format", "uuuu-MM-dd \'");
         raw.put("activity.date-display", "native");
         List<String> warnings = new ArrayList<>();
 
