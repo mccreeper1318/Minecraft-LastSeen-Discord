@@ -22,6 +22,9 @@ final class ValidatedConfiguration {
     private final String webhookConfigurationMessage;
     private final String header;
     private final boolean includeActivityDate;
+    private final boolean showPageNumbers;
+    private final boolean repeatHeader;
+    private final boolean showSummary;
     private final int inactiveAfterDays;
     private final TimestampSource timestampSource;
     private final boolean whitelistOnly;
@@ -41,6 +44,9 @@ final class ValidatedConfiguration {
             String webhookConfigurationMessage,
             String header,
             boolean includeActivityDate,
+            boolean showPageNumbers,
+            boolean repeatHeader,
+            boolean showSummary,
             int inactiveAfterDays,
             TimestampSource timestampSource,
             boolean whitelistOnly,
@@ -59,6 +65,9 @@ final class ValidatedConfiguration {
         this.webhookConfigurationMessage = webhookConfigurationMessage;
         this.header = header;
         this.includeActivityDate = includeActivityDate;
+        this.showPageNumbers = showPageNumbers;
+        this.repeatHeader = repeatHeader;
+        this.showSummary = showSummary;
         this.inactiveAfterDays = inactiveAfterDays;
         this.timestampSource = timestampSource;
         this.whitelistOnly = whitelistOnly;
@@ -77,6 +86,24 @@ final class ValidatedConfiguration {
         WebhookSetting webhook = parseWebhook(values.get("discord.webhook-url"), warningSink);
         String header = readString(values, "discord.header", DEFAULT_HEADER, warningSink);
         boolean includeActivityDate = readActivityDateSetting(values, warningSink);
+        boolean showPageNumbers = readBoolean(
+                values,
+                "discord.presentation.show-page-numbers",
+                false,
+                warningSink
+        );
+        boolean repeatHeader = readBoolean(
+                values,
+                "discord.presentation.repeat-header",
+                false,
+                warningSink
+        );
+        boolean showSummary = readBoolean(
+                values,
+                "discord.presentation.show-summary",
+                false,
+                warningSink
+        );
         int inactiveAfterDays = (int) readWholeNumber(
                 values,
                 "activity.inactive-after-days",
@@ -117,6 +144,9 @@ final class ValidatedConfiguration {
                 webhook.configurationMessage(),
                 header,
                 includeActivityDate,
+                showPageNumbers,
+                repeatHeader,
+                showSummary,
                 inactiveAfterDays,
                 timestampSource,
                 whitelistOnly,
@@ -399,6 +429,18 @@ final class ValidatedConfiguration {
 
     boolean includeActivityDate() {
         return includeActivityDate;
+    }
+
+    boolean showPageNumbers() {
+        return showPageNumbers;
+    }
+
+    boolean repeatHeader() {
+        return repeatHeader;
+    }
+
+    boolean showSummary() {
+        return showSummary;
     }
 
     int inactiveAfterDays() {

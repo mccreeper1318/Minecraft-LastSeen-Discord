@@ -10,6 +10,13 @@ discord:
   header: "**Server Activity Status**"
   # If true, the plugin appends the configured activity timestamp date to each line.
   include-last-seen-date: false
+  presentation:
+    # If true, each managed Discord page shows Page X of Y.
+    show-page-numbers: false
+    # If true, the configured header is repeated on continuation pages.
+    repeat-header: false
+    # If true, each page shows total, active, and inactive player counts after filtering.
+    show-summary: false
 
 activity:
   # Values below 1 are normalized to 1 day.

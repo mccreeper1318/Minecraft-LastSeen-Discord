@@ -93,6 +93,9 @@ class ValidatedConfigurationTest {
         );
 
         assertTrue(configuration.includeActivityDate());
+        assertFalse(configuration.showPageNumbers());
+        assertFalse(configuration.repeatHeader());
+        assertFalse(configuration.showSummary());
         assertEquals(ValidatedConfiguration.TimestampSource.LAST_SEEN, configuration.timestampSource());
         assertEquals(ValidatedConfiguration.DEFAULT_INACTIVE_AFTER_DAYS, configuration.inactiveAfterDays());
         assertEquals(60L, configuration.intervalMinutes());
@@ -107,6 +110,40 @@ class ValidatedConfigurationTest {
                 false
         ));
         assertEquals(ValidatedConfiguration.ActivityFilter.ALL, configuration.activityFilter());
+    }
+
+    @Test
+    void parsesOptionalDiscordPresentationSettings() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("discord.presentation.show-page-numbers", true);
+        raw.put("discord.presentation.repeat-header", true);
+        raw.put("discord.presentation.show-summary", true);
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertTrue(configuration.showPageNumbers());
+        assertTrue(configuration.repeatHeader());
+        assertTrue(configuration.showSummary());
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test
+    void invalidDiscordPresentationSettingsFallBackToDisabled() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("discord.presentation.show-page-numbers", "yes");
+        raw.put("discord.presentation.repeat-header", 1);
+        raw.put("discord.presentation.show-summary", "sometimes");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertFalse(configuration.showPageNumbers());
+        assertFalse(configuration.repeatHeader());
+        assertFalse(configuration.showSummary());
+        assertWarningFor(warnings, "discord.presentation.show-page-numbers");
+        assertWarningFor(warnings, "discord.presentation.repeat-header");
+        assertWarningFor(warnings, "discord.presentation.show-summary");
     }
 
     @Test
