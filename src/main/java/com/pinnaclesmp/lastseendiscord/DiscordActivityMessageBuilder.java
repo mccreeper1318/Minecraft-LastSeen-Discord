@@ -1,5 +1,6 @@
 package com.pinnaclesmp.lastseendiscord;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -193,10 +194,14 @@ final class DiscordActivityMessageBuilder {
         }
 
         DateTimeFormatter activityDateFormatter = null;
+        DateTimeFormatter fallbackActivityDateFormatter = null;
         if (settings.includeActivityDate()
                 && settings.activityDateDisplay() == ValidatedConfiguration.ActivityDateDisplay.DATE) {
             activityDateFormatter = DateTimeFormatter
                     .ofPattern(settings.activityDateFormat(), Locale.ROOT)
+                    .withZone(settings.activityTimezone());
+            fallbackActivityDateFormatter = DateTimeFormatter
+                    .ofPattern(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, Locale.ROOT)
                     .withZone(settings.activityTimezone());
         }
 
@@ -214,7 +219,12 @@ final class DiscordActivityMessageBuilder {
                             .append(status.activityTime() / 1000L)
                             .append(":F>");
                 } else {
-                    playerLine.append(activityDateFormatter.format(Instant.ofEpochMilli(status.activityTime())));
+                    Instant activityInstant = Instant.ofEpochMilli(status.activityTime());
+                    try {
+                        playerLine.append(activityDateFormatter.format(activityInstant));
+                    } catch (DateTimeException ex) {
+                        playerLine.append(fallbackActivityDateFormatter.format(activityInstant));
+                    }
                 }
             }
             lines.add(playerLine.toString());
