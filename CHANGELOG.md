@@ -4,6 +4,10 @@ All notable changes to LastSeenDiscord are documented here. Versions are listed 
 
 ## [1.2.1]
 
+### Security
+
+- Disable Discord mentions in webhook message payloads.
+
 ### Added
 
 - Add sync status, safe webhook test, and confirmed message-state reset commands with permissions and tab completion.
