@@ -321,6 +321,31 @@ final class DiscordActivityMessageBuilder {
                 boolean includeActivityDate,
                 String timestampSourceDisplayName,
                 String header,
+                ValidatedConfiguration.ActivityFilter activityFilter,
+                boolean showPageNumbers,
+                boolean repeatHeader,
+                boolean showSummary
+        ) {
+            this(
+                    inactiveAfterDays,
+                    includeActivityDate,
+                    timestampSourceDisplayName,
+                    header,
+                    activityFilter,
+                    showPageNumbers,
+                    repeatHeader,
+                    showSummary,
+                    ZoneId.of(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE),
+                    ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT,
+                    ValidatedConfiguration.ActivityDateDisplay.DATE
+            );
+        }
+
+        Settings(
+                int inactiveAfterDays,
+                boolean includeActivityDate,
+                String timestampSourceDisplayName,
+                String header,
                 ValidatedConfiguration.ActivityFilter activityFilter
         ) {
             this(
