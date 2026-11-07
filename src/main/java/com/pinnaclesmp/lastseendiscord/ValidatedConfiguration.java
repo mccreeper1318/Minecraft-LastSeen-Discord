@@ -1,6 +1,7 @@
 package com.pinnaclesmp.lastseendiscord;
 
 import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -353,10 +354,13 @@ final class ValidatedConfiguration {
         }
 
         try {
-            DateTimeFormatter.ofPattern(pattern, Locale.ROOT);
+            DateTimeFormatter formatter = DateTimeFormatter
+                    .ofPattern(pattern, Locale.ROOT)
+                    .withZone(ZoneId.of(DEFAULT_ACTIVITY_TIMEZONE));
+            formatter.format(Instant.parse("2000-12-31T23:59:59Z"));
             return pattern;
-        } catch (IllegalArgumentException ex) {
-            warningSink.accept("activity.date-format is not a valid Java date/time pattern; using "
+        } catch (IllegalArgumentException | DateTimeException ex) {
+            warningSink.accept("activity.date-format is not a usable Java date/time pattern; using "
                     + DEFAULT_ACTIVITY_DATE_FORMAT + ". Example: uuuu-MM-dd HH:mm.");
             return DEFAULT_ACTIVITY_DATE_FORMAT;
         }
