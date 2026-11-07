@@ -152,6 +152,18 @@ class ValidatedConfigurationTest {
     }
 
     @Test
+    void rejectsDatePatternThatCompilesButFailsForRepresentativeTime() {
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("activity.date-format", "uuuu-MM-dd pH:mm");
+        List<String> warnings = new ArrayList<>();
+
+        ValidatedConfiguration configuration = ValidatedConfiguration.parse(new MapValues(raw), warnings::add);
+
+        assertEquals(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, configuration.activityDateFormat());
+        assertWarningFor(warnings, "activity.date-format");
+    }
+
+    @Test
     void rejectsUnsafeOrOversizedActivityDatePatterns() {
         Map<String, Object> raw = new HashMap<>();
         raw.put("activity.date-format", "uuuu-MM-dd\nHH:mm");
