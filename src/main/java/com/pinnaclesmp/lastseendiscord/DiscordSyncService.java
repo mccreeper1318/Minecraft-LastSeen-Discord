@@ -416,7 +416,10 @@ public final class DiscordSyncService {
                         configuration.activityFilter(),
                         configuration.showPageNumbers(),
                         configuration.repeatHeader(),
-                        configuration.showSummary()
+                        configuration.showSummary(),
+                        configuration.activityTimezone(),
+                        configuration.activityDateFormat(),
+                        configuration.activityDateDisplay()
                 ),
                 List.copyOf(players),
                 capturedAtMillis

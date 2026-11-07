@@ -47,6 +47,9 @@ The reset command is intentionally guarded. Before running it, reconcile or dele
 | `discord.presentation.show-summary` | `false` | Shows total, active, and inactive counts on every page after all player filters are applied. |
 | `activity.inactive-after-days` | `30` | Number of days without activity before a player is marked inactive. Values below `1` are normalized to `1`. |
 | `activity.timestamp-source` | `LAST_SEEN` | Uses `LAST_SEEN` or `LAST_LOGIN`, with the other timestamp as a compatibility fallback. Invalid values use `LAST_SEEN`. |
+| `activity.timezone` | `UTC` | IANA timezone used for activity dates in `DATE` mode, such as `America/New_York`. Invalid values fall back to UTC. |
+| `activity.date-format` | `uuuu-MM-dd` | Java `DateTimeFormatter` pattern used in `DATE` mode. Invalid, multiline, or oversized patterns fall back to the default. |
+| `activity.date-display` | `DATE` | `DATE` uses the configured timezone/format. `DISCORD` outputs a Discord-native `<t:epoch:F>` timestamp localized by each Discord client. |
 | `filters.whitelist-only` | `false` | When enabled, only players currently present in the Minecraft whitelist are included. |
 | `filters.excluded-uuids` | `[]` | UUIDs to exclude. UUID exclusions remain effective across Minecraft name changes. |
 | `filters.excluded-names` | `[]` | Player names to exclude, matched case-insensitively. UUID exclusions are preferred for long-term exclusions. |
@@ -62,6 +65,8 @@ Every supported setting is validated at startup and again by `/lsd reload`. Inva
 Player filters are composable. For example, `filters.whitelist-only: true` can be combined with UUID/name exclusions and `filters.activity: INACTIVE` to show only inactive whitelisted members after exclusions. Filtering is applied before Discord message pagination, so page creation/removal reflects only the final filtered player set. Existing installations keep the previous behavior because all filter defaults include every known player.
 
 Multi-page presentation options are also opt-in. Page numbers, repeated headings, and summary counts default to disabled so existing installations keep the previous message format. When summaries are enabled, their total/active/inactive counts are calculated after filtering and remain the same across all pages in that synchronization.
+
+Activity date rendering is deterministic when enabled. `activity.timezone` defaults to `UTC` instead of the server operating system timezone, and `activity.date-format` defaults to `uuuu-MM-dd`. Set an IANA zone such as `America/New_York` when you want fixed community-local rendering. `activity.date-display: DISCORD` ignores those two presentation settings and sends Discord's `<t:epoch:F>` syntax so each viewer sees the timestamp in their own Discord locale/timezone.
 
 The deprecated `discord.message-ids` and `discord.message-id` values are retained only to migrate installations upgrading from version 1.1.0 or earlier. Malformed or duplicate legacy IDs are ignored and reported during validation. Version 1.1.1 and later store generated message IDs in `message-state.json`; malformed or duplicate IDs in that runtime-state file cause synchronization to fail closed instead of entering active state. Do not edit `message-state.json` while the server is running.
 

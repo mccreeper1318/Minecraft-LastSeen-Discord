@@ -1,8 +1,10 @@
 package com.pinnaclesmp.lastseendiscord;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -10,8 +12,6 @@ import java.util.List;
 final class DiscordActivityMessageBuilder {
     static final int DISCORD_CHUNK_MAX = 1900;
     private static final int COMPACT_HEADER_MAX = 256;
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("uuuu-MM-dd")
-            .withZone(ZoneId.systemDefault());
 
     private DiscordActivityMessageBuilder() {
     }
@@ -193,6 +193,18 @@ final class DiscordActivityMessageBuilder {
             return;
         }
 
+        DateTimeFormatter activityDateFormatter = null;
+        DateTimeFormatter fallbackActivityDateFormatter = null;
+        if (settings.includeActivityDate()
+                && settings.activityDateDisplay() == ValidatedConfiguration.ActivityDateDisplay.DATE) {
+            activityDateFormatter = DateTimeFormatter
+                    .ofPattern(settings.activityDateFormat(), Locale.ROOT)
+                    .withZone(settings.activityTimezone());
+            fallbackActivityDateFormatter = DateTimeFormatter
+                    .ofPattern(ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT, Locale.ROOT)
+                    .withZone(settings.activityTimezone());
+        }
+
         for (PlayerStatus status : statuses) {
             StringBuilder playerLine = new StringBuilder();
             playerLine.append("- ")
@@ -201,8 +213,19 @@ final class DiscordActivityMessageBuilder {
                     .append(status.active() ? "active" : "inactive")
                     .append(")");
             if (settings.includeActivityDate()) {
-                playerLine.append(" — ")
-                        .append(DATE_FORMATTER.format(Instant.ofEpochMilli(status.activityTime())));
+                playerLine.append(" — ");
+                if (settings.activityDateDisplay() == ValidatedConfiguration.ActivityDateDisplay.DISCORD) {
+                    playerLine.append("<t:")
+                            .append(status.activityTime() / 1000L)
+                            .append(":F>");
+                } else {
+                    Instant activityInstant = Instant.ofEpochMilli(status.activityTime());
+                    try {
+                        playerLine.append(activityDateFormatter.format(activityInstant));
+                    } catch (DateTimeException ex) {
+                        playerLine.append(fallbackActivityDateFormatter.format(activityInstant));
+                    }
+                }
             }
             lines.add(playerLine.toString());
         }
@@ -282,7 +305,10 @@ final class DiscordActivityMessageBuilder {
             ValidatedConfiguration.ActivityFilter activityFilter,
             boolean showPageNumbers,
             boolean repeatHeader,
-            boolean showSummary
+            boolean showSummary,
+            ZoneId activityTimezone,
+            String activityDateFormat,
+            ValidatedConfiguration.ActivityDateDisplay activityDateDisplay
     ) {
         Settings(int inactiveAfterDays, boolean includeActivityDate, String timestampSourceDisplayName, String header) {
             this(
@@ -293,7 +319,35 @@ final class DiscordActivityMessageBuilder {
                     ValidatedConfiguration.ActivityFilter.ALL,
                     false,
                     false,
-                    false
+                    false,
+                    ZoneId.of(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE),
+                    ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT,
+                    ValidatedConfiguration.ActivityDateDisplay.DATE
+            );
+        }
+
+        Settings(
+                int inactiveAfterDays,
+                boolean includeActivityDate,
+                String timestampSourceDisplayName,
+                String header,
+                ValidatedConfiguration.ActivityFilter activityFilter,
+                boolean showPageNumbers,
+                boolean repeatHeader,
+                boolean showSummary
+        ) {
+            this(
+                    inactiveAfterDays,
+                    includeActivityDate,
+                    timestampSourceDisplayName,
+                    header,
+                    activityFilter,
+                    showPageNumbers,
+                    repeatHeader,
+                    showSummary,
+                    ZoneId.of(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE),
+                    ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT,
+                    ValidatedConfiguration.ActivityDateDisplay.DATE
             );
         }
 
@@ -312,7 +366,10 @@ final class DiscordActivityMessageBuilder {
                     activityFilter,
                     false,
                     false,
-                    false
+                    false,
+                    ZoneId.of(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE),
+                    ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT,
+                    ValidatedConfiguration.ActivityDateDisplay.DATE
             );
         }
 
@@ -325,6 +382,15 @@ final class DiscordActivityMessageBuilder {
             activityFilter = activityFilter == null
                     ? ValidatedConfiguration.ActivityFilter.ALL
                     : activityFilter;
+            activityTimezone = activityTimezone == null
+                    ? ZoneId.of(ValidatedConfiguration.DEFAULT_ACTIVITY_TIMEZONE)
+                    : activityTimezone;
+            activityDateFormat = activityDateFormat == null || activityDateFormat.isBlank()
+                    ? ValidatedConfiguration.DEFAULT_ACTIVITY_DATE_FORMAT
+                    : activityDateFormat;
+            activityDateDisplay = activityDateDisplay == null
+                    ? ValidatedConfiguration.ActivityDateDisplay.DATE
+                    : activityDateDisplay;
         }
 
         boolean presentationEnabled() {
