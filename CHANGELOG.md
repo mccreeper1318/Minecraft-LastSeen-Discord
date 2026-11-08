@@ -2,6 +2,24 @@
 
 All notable changes to LastSeenDiscord are documented here. Versions are listed newest first.
 
+## [1.2.1]
+
+### Security
+
+- Disable Discord mentions in webhook message payloads.
+
+### Added
+
+- Add sync status, safe webhook test, and confirmed message-state reset commands with permissions and tab completion.
+- Add optional page numbers, repeated headings, and filtered activity summaries for multi-message Discord output.
+- Add configurable activity timezone, date format, and Discord-native timestamp output.
+
+### Dependencies
+
+- Update Paper API to `26.3.build.244-stable`.
+- Update Gson to `2.15.0` and Gradle to `9.8.2`.
+- Update GitHub Actions dependencies.
+
 ## [1.2.0]
 
 ### Added

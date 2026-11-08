@@ -23,6 +23,25 @@ class SyncRequestQueueTest {
     }
 
     @Test
+    void snapshotReportsWorkerAndPendingState() {
+        SyncRequestQueue queue = new SyncRequestQueue();
+
+        assertFalse(queue.snapshot().workerOwned());
+        assertFalse(queue.snapshot().pending());
+
+        assertTrue(queue.request("first"));
+        assertTrue(queue.snapshot().workerOwned());
+        assertTrue(queue.snapshot().pending());
+
+        queue.poll();
+        assertTrue(queue.snapshot().workerOwned());
+        assertFalse(queue.snapshot().pending());
+
+        queue.releaseWorker();
+        assertFalse(queue.snapshot().workerOwned());
+    }
+
+    @Test
     void retryPreservesANewerPendingReason() {
         SyncRequestQueue queue = new SyncRequestQueue();
         queue.request("first");

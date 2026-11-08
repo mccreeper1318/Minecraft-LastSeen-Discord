@@ -1,5 +1,9 @@
 package com.pinnaclesmp.lastseendiscord;
 
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -13,6 +17,9 @@ final class ValidatedConfiguration {
     static final long MAX_INTERVAL_MINUTES = 525_600L;
     static final int DEFAULT_INACTIVE_AFTER_DAYS = 30;
     static final int DEFAULT_EVENT_DEBOUNCE_SECONDS = EventSyncDebouncer.DEFAULT_DEBOUNCE_SECONDS;
+    static final String DEFAULT_ACTIVITY_TIMEZONE = "UTC";
+    static final String DEFAULT_ACTIVITY_DATE_FORMAT = "uuuu-MM-dd";
+    private static final int MAX_ACTIVITY_DATE_FORMAT_LENGTH = 80;
 
     private static final String WEBHOOK_PLACEHOLDER = "PUT_DISCORD_WEBHOOK_URL_HERE";
     private static final String DEFAULT_HEADER = "**Server Activity Status**";
@@ -22,8 +29,14 @@ final class ValidatedConfiguration {
     private final String webhookConfigurationMessage;
     private final String header;
     private final boolean includeActivityDate;
+    private final boolean showPageNumbers;
+    private final boolean repeatHeader;
+    private final boolean showSummary;
     private final int inactiveAfterDays;
     private final TimestampSource timestampSource;
+    private final ZoneId activityTimezone;
+    private final String activityDateFormat;
+    private final ActivityDateDisplay activityDateDisplay;
     private final boolean whitelistOnly;
     private final Set<UUID> excludedPlayerUuids;
     private final Set<String> excludedPlayerNames;
@@ -41,8 +54,14 @@ final class ValidatedConfiguration {
             String webhookConfigurationMessage,
             String header,
             boolean includeActivityDate,
+            boolean showPageNumbers,
+            boolean repeatHeader,
+            boolean showSummary,
             int inactiveAfterDays,
             TimestampSource timestampSource,
+            ZoneId activityTimezone,
+            String activityDateFormat,
+            ActivityDateDisplay activityDateDisplay,
             boolean whitelistOnly,
             Set<UUID> excludedPlayerUuids,
             Set<String> excludedPlayerNames,
@@ -59,8 +78,14 @@ final class ValidatedConfiguration {
         this.webhookConfigurationMessage = webhookConfigurationMessage;
         this.header = header;
         this.includeActivityDate = includeActivityDate;
+        this.showPageNumbers = showPageNumbers;
+        this.repeatHeader = repeatHeader;
+        this.showSummary = showSummary;
         this.inactiveAfterDays = inactiveAfterDays;
         this.timestampSource = timestampSource;
+        this.activityTimezone = activityTimezone;
+        this.activityDateFormat = activityDateFormat;
+        this.activityDateDisplay = activityDateDisplay;
         this.whitelistOnly = whitelistOnly;
         this.excludedPlayerUuids = Set.copyOf(excludedPlayerUuids);
         this.excludedPlayerNames = Set.copyOf(excludedPlayerNames);
@@ -77,6 +102,24 @@ final class ValidatedConfiguration {
         WebhookSetting webhook = parseWebhook(values.get("discord.webhook-url"), warningSink);
         String header = readString(values, "discord.header", DEFAULT_HEADER, warningSink);
         boolean includeActivityDate = readActivityDateSetting(values, warningSink);
+        boolean showPageNumbers = readBoolean(
+                values,
+                "discord.presentation.show-page-numbers",
+                false,
+                warningSink
+        );
+        boolean repeatHeader = readBoolean(
+                values,
+                "discord.presentation.repeat-header",
+                false,
+                warningSink
+        );
+        boolean showSummary = readBoolean(
+                values,
+                "discord.presentation.show-summary",
+                false,
+                warningSink
+        );
         int inactiveAfterDays = (int) readWholeNumber(
                 values,
                 "activity.inactive-after-days",
@@ -86,6 +129,9 @@ final class ValidatedConfiguration {
                 warningSink
         );
         TimestampSource timestampSource = readTimestampSource(values, warningSink);
+        ZoneId activityTimezone = readActivityTimezone(values, warningSink);
+        String activityDateFormat = readActivityDateFormat(values, warningSink);
+        ActivityDateDisplay activityDateDisplay = readActivityDateDisplay(values, warningSink);
         boolean whitelistOnly = readBoolean(values, "filters.whitelist-only", false, warningSink);
         Set<UUID> excludedPlayerUuids = readExcludedPlayerUuids(values, warningSink);
         Set<String> excludedPlayerNames = readExcludedPlayerNames(values, warningSink);
@@ -117,8 +163,14 @@ final class ValidatedConfiguration {
                 webhook.configurationMessage(),
                 header,
                 includeActivityDate,
+                showPageNumbers,
+                repeatHeader,
+                showSummary,
                 inactiveAfterDays,
                 timestampSource,
+                activityTimezone,
+                activityDateFormat,
+                activityDateDisplay,
                 whitelistOnly,
                 excludedPlayerUuids,
                 excludedPlayerNames,
@@ -250,6 +302,84 @@ final class ValidatedConfiguration {
         } catch (IllegalArgumentException ex) {
             warningSink.accept("activity.timestamp-source must be LAST_SEEN or LAST_LOGIN; using LAST_SEEN.");
             return TimestampSource.LAST_SEEN;
+        }
+    }
+
+    private static ZoneId readActivityTimezone(Values values, Consumer<String> warningSink) {
+        Object raw = values.get("activity.timezone");
+        if (raw == null) {
+            return ZoneId.of(DEFAULT_ACTIVITY_TIMEZONE);
+        }
+        if (!(raw instanceof String stringValue) || stringValue.isBlank()) {
+            warningSink.accept("activity.timezone must be a valid IANA timezone such as UTC or America/New_York; "
+                    + "using " + DEFAULT_ACTIVITY_TIMEZONE + ".");
+            return ZoneId.of(DEFAULT_ACTIVITY_TIMEZONE);
+        }
+
+        String timezone = stringValue.trim();
+        try {
+            ZoneId zoneId = ZoneId.of(timezone);
+            if (!DEFAULT_ACTIVITY_TIMEZONE.equals(zoneId.getId())
+                    && !ZoneId.getAvailableZoneIds().contains(zoneId.getId())) {
+                throw new DateTimeException("Timezone is not an IANA region ID.");
+            }
+            return zoneId;
+        } catch (DateTimeException ex) {
+            warningSink.accept("activity.timezone must be a valid IANA timezone such as UTC or America/New_York; "
+                    + "using " + DEFAULT_ACTIVITY_TIMEZONE + ".");
+            return ZoneId.of(DEFAULT_ACTIVITY_TIMEZONE);
+        }
+    }
+
+    private static String readActivityDateFormat(Values values, Consumer<String> warningSink) {
+        Object raw = values.get("activity.date-format");
+        if (raw == null) {
+            return DEFAULT_ACTIVITY_DATE_FORMAT;
+        }
+        if (!(raw instanceof String stringValue)) {
+            warningSink.accept("activity.date-format must be a valid Java date/time pattern up to "
+                    + MAX_ACTIVITY_DATE_FORMAT_LENGTH + " characters; using " + DEFAULT_ACTIVITY_DATE_FORMAT + ".");
+            return DEFAULT_ACTIVITY_DATE_FORMAT;
+        }
+
+        String pattern = stringValue.trim();
+        if (pattern.isEmpty()
+                || pattern.length() > MAX_ACTIVITY_DATE_FORMAT_LENGTH
+                || pattern.indexOf('\n') >= 0
+                || pattern.indexOf('\r') >= 0) {
+            warningSink.accept("activity.date-format must be a valid Java date/time pattern up to "
+                    + MAX_ACTIVITY_DATE_FORMAT_LENGTH + " characters without line breaks; using "
+                    + DEFAULT_ACTIVITY_DATE_FORMAT + ".");
+            return DEFAULT_ACTIVITY_DATE_FORMAT;
+        }
+
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter
+                    .ofPattern(pattern, Locale.ROOT)
+                    .withZone(ZoneId.of(DEFAULT_ACTIVITY_TIMEZONE));
+            formatter.format(Instant.parse("2000-12-31T23:59:59Z"));
+            return pattern;
+        } catch (IllegalArgumentException | DateTimeException ex) {
+            warningSink.accept("activity.date-format is not a usable Java date/time pattern; using "
+                    + DEFAULT_ACTIVITY_DATE_FORMAT + ". Example: uuuu-MM-dd HH:mm.");
+            return DEFAULT_ACTIVITY_DATE_FORMAT;
+        }
+    }
+
+    private static ActivityDateDisplay readActivityDateDisplay(Values values, Consumer<String> warningSink) {
+        Object raw = values.get("activity.date-display");
+        if (raw == null) {
+            return ActivityDateDisplay.DATE;
+        }
+        if (!(raw instanceof String stringValue) || stringValue.isBlank()) {
+            warningSink.accept("activity.date-display must be DATE or DISCORD; using DATE.");
+            return ActivityDateDisplay.DATE;
+        }
+        try {
+            return ActivityDateDisplay.valueOf(stringValue.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            warningSink.accept("activity.date-display must be DATE or DISCORD; using DATE.");
+            return ActivityDateDisplay.DATE;
         }
     }
 
@@ -401,12 +531,36 @@ final class ValidatedConfiguration {
         return includeActivityDate;
     }
 
+    boolean showPageNumbers() {
+        return showPageNumbers;
+    }
+
+    boolean repeatHeader() {
+        return repeatHeader;
+    }
+
+    boolean showSummary() {
+        return showSummary;
+    }
+
     int inactiveAfterDays() {
         return inactiveAfterDays;
     }
 
     TimestampSource timestampSource() {
         return timestampSource;
+    }
+
+    ZoneId activityTimezone() {
+        return activityTimezone;
+    }
+
+    String activityDateFormat() {
+        return activityDateFormat;
+    }
+
+    ActivityDateDisplay activityDateDisplay() {
+        return activityDateDisplay;
     }
 
     boolean includesPlayer(UUID uuid, String name, boolean whitelisted) {
@@ -468,6 +622,11 @@ final class ValidatedConfiguration {
         };
 
         abstract boolean includes(boolean active);
+    }
+
+    enum ActivityDateDisplay {
+        DATE,
+        DISCORD
     }
 
     enum TimestampSource {

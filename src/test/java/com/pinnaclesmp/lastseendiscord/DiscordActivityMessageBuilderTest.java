@@ -3,6 +3,8 @@ package com.pinnaclesmp.lastseendiscord;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,6 +45,9 @@ class DiscordActivityMessageBuilderTest {
         assertTrue(firstPlayer >= 0);
         assertTrue(lastPlayer > firstPlayer);
         assertTrue(rendered.contains("Updated: <t:1800000000:R>"));
+        assertEquals(1, occurrences(rendered, "Large history test"));
+        assertFalse(rendered.contains("Page 1 of"));
+        assertFalse(rendered.contains("Players: 50000 total"));
     }
 
     @Test
@@ -74,5 +79,220 @@ class DiscordActivityMessageBuilderTest {
         String rendered = String.join("\n", chunks);
         assertFalse(rendered.contains("ActivePlayer"));
         assertTrue(rendered.contains("InactivePlayer (inactive)"));
+    }
+
+    @Test
+    void addsPageNumbersRepeatedHeadersAndAccurateSummary() {
+        long capturedAtMillis = 1_800_000_000_000L;
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                false,
+                "last seen",
+                "**Multi-page status**",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                true,
+                true,
+                true
+        );
+
+        List<DiscordActivityMessageBuilder.PlayerActivity> players = new ArrayList<>();
+        for (int index = 0; index < 150; index++) {
+            players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                    "ActivePlayer" + String.format("%03d", index),
+                    capturedAtMillis
+            ));
+        }
+        for (int index = 0; index < 150; index++) {
+            players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                    "InactivePlayer" + String.format("%03d", index),
+                    capturedAtMillis - 31L * 24L * 60L * 60L * 1000L
+            ));
+        }
+
+        List<String> chunks = DiscordActivityMessageBuilder.build(settings, players, capturedAtMillis);
+
+        assertTrue(chunks.size() > 1);
+        assertTrue(chunks.stream().allMatch(chunk -> chunk.length() <= DiscordActivityMessageBuilder.DISCORD_CHUNK_MAX));
+        for (int index = 0; index < chunks.size(); index++) {
+            String chunk = chunks.get(index);
+            assertTrue(chunk.contains("**Multi-page status**"));
+            assertTrue(chunk.contains("Page " + (index + 1) + " of " + chunks.size()));
+            assertTrue(chunk.contains("Players: 300 total — 150 active, 150 inactive"));
+        }
+    }
+
+    @Test
+    void summaryCountsOnlyPlayersRemainingAfterActivityFilter() {
+        long capturedAtMillis = 1_800_000_000_000L;
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                false,
+                "last seen",
+                "Filtered summary",
+                ValidatedConfiguration.ActivityFilter.INACTIVE,
+                false,
+                false,
+                true
+        );
+
+        List<DiscordActivityMessageBuilder.PlayerActivity> players = new ArrayList<>();
+        for (int index = 0; index < 50; index++) {
+            players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                    "ActivePlayer" + index,
+                    capturedAtMillis
+            ));
+        }
+        for (int index = 0; index < 3; index++) {
+            players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                    "InactivePlayer" + index,
+                    capturedAtMillis - 31L * 24L * 60L * 60L * 1000L
+            ));
+        }
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(settings, players, capturedAtMillis)
+        );
+
+        assertTrue(rendered.contains("Players: 3 total — 0 active, 3 inactive"));
+        assertFalse(rendered.contains("ActivePlayer"));
+        assertTrue(rendered.contains("InactivePlayer0 (inactive)"));
+    }
+
+    @Test
+    void presentationKeepsEveryPageWithinLimitWithVeryLongConfiguredHeader() {
+        long capturedAtMillis = 1_800_000_000_000L;
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                false,
+                "last seen",
+                "H".repeat(3_000),
+                ValidatedConfiguration.ActivityFilter.ALL,
+                true,
+                true,
+                true
+        );
+
+        List<DiscordActivityMessageBuilder.PlayerActivity> players = new ArrayList<>();
+        for (int index = 0; index < 400; index++) {
+            players.add(new DiscordActivityMessageBuilder.PlayerActivity(
+                    "Player" + index,
+                    capturedAtMillis
+            ));
+        }
+
+        List<String> chunks = DiscordActivityMessageBuilder.build(settings, players, capturedAtMillis);
+
+        assertTrue(chunks.size() > 1);
+        assertTrue(chunks.stream().allMatch(chunk -> chunk.length() <= DiscordActivityMessageBuilder.DISCORD_CHUNK_MAX));
+        assertTrue(chunks.getFirst().startsWith("H".repeat(253) + "..."));
+    }
+
+    @Test
+    void formatsConfiguredTimezoneAcrossDaylightSavingFallback() {
+        long firstOccurrence = Instant.parse("2026-11-01T05:30:00Z").toEpochMilli();
+        long secondOccurrence = Instant.parse("2026-11-01T06:30:00Z").toEpochMilli();
+        long capturedAtMillis = Instant.parse("2026-11-01T07:00:00Z").toEpochMilli();
+
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                true,
+                "last seen",
+                "DST test",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                false,
+                false,
+                false,
+                ZoneId.of("America/New_York"),
+                "uuuu-MM-dd HH:mm xxx",
+                ValidatedConfiguration.ActivityDateDisplay.DATE
+        );
+
+        List<DiscordActivityMessageBuilder.PlayerActivity> players = List.of(
+                new DiscordActivityMessageBuilder.PlayerActivity("BeforeFallback", firstOccurrence),
+                new DiscordActivityMessageBuilder.PlayerActivity("AfterFallback", secondOccurrence)
+        );
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(settings, players, capturedAtMillis)
+        );
+
+        assertTrue(rendered.contains("BeforeFallback (active) — 2026-11-01 01:30 -04:00"));
+        assertTrue(rendered.contains("AfterFallback (active) — 2026-11-01 01:30 -05:00"));
+    }
+
+    @Test
+    void fallsBackAtRuntimeIfDatePatternFailsForAPlayerTimestamp() {
+        long activityMillis = Instant.parse("2026-01-01T12:30:00Z").toEpochMilli();
+        long capturedAtMillis = Instant.parse("2026-01-01T13:00:00Z").toEpochMilli();
+
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                true,
+                "last seen",
+                "Runtime fallback",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                false,
+                false,
+                false,
+                ZoneId.of("UTC"),
+                "uuuu-MM-dd pH:mm",
+                ValidatedConfiguration.ActivityDateDisplay.DATE
+        );
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(
+                        settings,
+                        List.of(new DiscordActivityMessageBuilder.PlayerActivity("FallbackPlayer", activityMillis)),
+                        capturedAtMillis
+                )
+        );
+
+        assertTrue(rendered.contains("FallbackPlayer (active) — 2026-01-01"));
+    }
+
+    @Test
+    void rendersDiscordNativeTimestampFromExactEpochSecond() {
+        long activityMillis = Instant.parse("2026-03-08T07:30:00.999Z").toEpochMilli();
+        long capturedAtMillis = Instant.parse("2026-03-08T08:00:00Z").toEpochMilli();
+        long epochSeconds = activityMillis / 1000L;
+
+        DiscordActivityMessageBuilder.Settings settings = new DiscordActivityMessageBuilder.Settings(
+                30,
+                true,
+                "last seen",
+                "Discord timestamp test",
+                ValidatedConfiguration.ActivityFilter.ALL,
+                false,
+                false,
+                false,
+                ZoneId.of("America/New_York"),
+                "uuuu-MM-dd HH:mm",
+                ValidatedConfiguration.ActivityDateDisplay.DISCORD
+        );
+
+        String rendered = String.join(
+                "\n",
+                DiscordActivityMessageBuilder.build(
+                        settings,
+                        List.of(new DiscordActivityMessageBuilder.PlayerActivity("TimestampPlayer", activityMillis)),
+                        capturedAtMillis
+                )
+        );
+
+        assertTrue(rendered.contains("TimestampPlayer (active) — <t:" + epochSeconds + ":F>"));
+        assertFalse(rendered.contains("2026-03-08 03:30"));
+    }
+
+    private static int occurrences(String value, String target) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf(target, index)) >= 0) {
+            count++;
+            index += target.length();
+        }
+        return count;
     }
 }

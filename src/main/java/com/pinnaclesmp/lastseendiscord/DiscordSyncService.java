@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 
 public final class DiscordSyncService {
     private final LastSeenDiscordPlugin plugin;
@@ -21,8 +22,12 @@ public final class DiscordSyncService {
     private final Object lifecycleLock = new Object();
 
     private volatile boolean runtimeStateUsable;
+    private volatile boolean syncInProgress;
+    private volatile int retryAttempt;
+    private volatile long lastAttemptMillis;
+    private volatile long lastSuccessMillis;
+    private volatile String lastResult = "never";
     private BukkitTask retryTask;
-    private int retryAttempt;
 
     public DiscordSyncService(LastSeenDiscordPlugin plugin) {
         this.plugin = plugin;
@@ -102,6 +107,118 @@ public final class DiscordSyncService {
         return webhookStateManager.recoverAmbiguousCreate();
     }
 
+    public SyncStatus status() {
+        SyncRequestQueue.Snapshot queueSnapshot = requestQueue.snapshot();
+        WebhookStateManager.Snapshot stateSnapshot = webhookStateManager.snapshot();
+        boolean retryScheduled;
+        synchronized (lifecycleLock) {
+            retryScheduled = retryTask != null;
+        }
+
+        boolean configured = plugin.validatedConfiguration().webhookEndpoint() != null;
+        String state;
+        if (queueSnapshot.stopped() || stateSnapshot.stopped()) {
+            state = "STOPPED";
+        } else if (!runtimeStateUsable) {
+            state = "STATE_UNAVAILABLE";
+        } else if (!configured) {
+            state = "UNCONFIGURED";
+        } else if (syncInProgress || stateSnapshot.createInProgress()) {
+            state = "SYNCING";
+        } else if (stateSnapshot.createOutcomeUnknown()) {
+            state = "CREATE_BLOCKED";
+        } else if (retryScheduled) {
+            state = "RETRY_WAIT";
+        } else if (queueSnapshot.pending()) {
+            state = "QUEUED";
+        } else if (queueSnapshot.workerOwned()) {
+            state = "WORKING";
+        } else {
+            state = "IDLE";
+        }
+
+        return new SyncStatus(
+                state,
+                configured,
+                runtimeStateUsable,
+                lastAttemptMillis,
+                lastSuccessMillis,
+                lastResult,
+                queueSnapshot.pending(),
+                queueSnapshot.workerOwned(),
+                retryScheduled,
+                retryAttempt,
+                stateSnapshot.messageIds().size(),
+                stateSnapshot.createOutcomeUnknown()
+        );
+    }
+
+    public void testWebhook(Consumer<WebhookTestResult> resultConsumer) {
+        WebhookEndpoint endpoint = plugin.validatedConfiguration().webhookEndpoint();
+        if (endpoint == null) {
+            resultConsumer.accept(new WebhookTestResult(
+                    false,
+                    "Discord webhook is not configured or is invalid."
+            ));
+            return;
+        }
+
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                WebhookTestResult result;
+                try {
+                    webhookClient.test(endpoint);
+                    result = new WebhookTestResult(true, "Discord webhook connection test passed.");
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    result = new WebhookTestResult(false, "Discord webhook connection test was interrupted.");
+                } catch (Exception ex) {
+                    result = new WebhookTestResult(false, safeFailureMessage(ex));
+                }
+
+                WebhookTestResult completedResult = result;
+                try {
+                    Bukkit.getScheduler().runTask(plugin, () -> resultConsumer.accept(completedResult));
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning("Could not deliver the Discord webhook test result.");
+                }
+            });
+        } catch (RuntimeException ex) {
+            resultConsumer.accept(new WebhookTestResult(false, "Could not schedule the Discord webhook test."));
+        }
+    }
+
+    public ResetResult resetTrackedMessages() throws IOException {
+        synchronized (lifecycleLock) {
+            if (!runtimeStateUsable) {
+                return new ResetResult(ResetState.STATE_UNAVAILABLE, 0);
+            }
+
+            ValidatedConfiguration configuration = plugin.validatedConfiguration();
+            if (configuration.webhookEndpoint() == null) {
+                return new ResetResult(ResetState.UNCONFIGURED, 0);
+            }
+
+            SyncRequestQueue.Snapshot queueSnapshot = requestQueue.snapshot();
+            WebhookStateManager.Snapshot stateSnapshot = webhookStateManager.snapshot();
+            if (queueSnapshot.workerOwned()
+                    || queueSnapshot.pending()
+                    || retryTask != null
+                    || stateSnapshot.createInProgress()) {
+                return new ResetResult(ResetState.BUSY, 0);
+            }
+
+            try {
+                int clearedPages = webhookStateManager.resetTrackedMessages(configuration.webhookIdentity());
+                retryAttempt = 0;
+                lastResult = "message state reset";
+                return new ResetResult(ResetState.SUCCESS, clearedPages);
+            } catch (StaleConfigurationException ex) {
+                return new ResetResult(ResetState.STALE_CONFIGURATION, 0);
+            }
+        }
+    }
+
     private void runSyncLoop() {
         while (!requestQueue.isStopped()) {
             SyncRequestQueue.Work work = requestQueue.poll();
@@ -109,33 +226,49 @@ public final class DiscordSyncService {
                 return;
             }
 
+            lastAttemptMillis = System.currentTimeMillis();
+            lastResult = "running";
+            syncInProgress = true;
             try {
-                syncOnce(work.reason());
+                boolean updated = syncOnce(work.reason());
                 retryAttempt = 0;
+                if (updated) {
+                    lastSuccessMillis = System.currentTimeMillis();
+                    lastResult = "success";
+                } else {
+                    lastResult = "skipped";
+                }
             } catch (StaleConfigurationException ex) {
                 retryAttempt = 0;
+                lastResult = "discarded after configuration change";
                 plugin.getLogger().info("Discarded a Discord sync result because configuration changed while it was in flight.");
             } catch (RetryableSyncException ex) {
                 retryAttempt++;
                 if (retryAttempt <= RetryPolicy.MAX_ATTEMPTS && !requestQueue.isStopped()) {
                     long delayMillis = RetryPolicy.delayMillis(retryAttempt, ex.suggestedDelayMillis());
                     requestQueue.requeue("automatic retry");
+                    lastResult = "waiting to retry";
                     plugin.getLogger().warning(ex.getMessage() + " Retrying in " + delayMillis
                             + "ms (attempt " + retryAttempt + "/" + RetryPolicy.MAX_ATTEMPTS + ").");
                     scheduleRetry(delayMillis);
                     return;
                 }
 
+                lastResult = "failed";
                 plugin.getLogger().severe("Discord sync stopped retrying after " + RetryPolicy.MAX_ATTEMPTS
                         + " attempts: " + ex.getMessage());
                 retryAttempt = 0;
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
+                lastResult = "interrupted";
                 requestQueue.releaseWorker();
                 return;
             } catch (Exception ex) {
                 retryAttempt = 0;
+                lastResult = "failed";
                 logSafeFailure(work.reason(), ex);
+            } finally {
+                syncInProgress = false;
             }
         }
         requestQueue.releaseWorker();
@@ -164,11 +297,11 @@ public final class DiscordSyncService {
         }
     }
 
-    private void syncOnce(String reason) throws IOException, InterruptedException {
+    private boolean syncOnce(String reason) throws IOException, InterruptedException {
         SyncSnapshot snapshot = collectSyncSnapshot();
         if (!snapshot.configured()) {
             plugin.getLogger().warning(snapshot.configurationMessage());
-            return;
+            return false;
         }
 
         DiscordMessageSynchronizer messageSynchronizer = new DiscordMessageSynchronizer(
@@ -187,6 +320,7 @@ public final class DiscordSyncService {
         );
         plugin.getLogger().info("Updated Discord webhook messages (" + snapshot.chunks().size()
                 + " chunk(s), reason: " + reason + ")");
+        return true;
     }
 
     private SyncSnapshot collectSyncSnapshot() throws IOException, InterruptedException {
@@ -279,7 +413,13 @@ public final class DiscordSyncService {
                         configuration.includeActivityDate(),
                         configuration.timestampSource().displayName(),
                         configuration.header(),
-                        configuration.activityFilter()
+                        configuration.activityFilter(),
+                        configuration.showPageNumbers(),
+                        configuration.repeatHeader(),
+                        configuration.showSummary(),
+                        configuration.activityTimezone(),
+                        configuration.activityDateFormat(),
+                        configuration.activityDateDisplay()
                 ),
                 List.copyOf(players),
                 capturedAtMillis
@@ -339,15 +479,47 @@ public final class DiscordSyncService {
     }
 
     private void logSafeFailure(String reason, Exception exception) {
-        String safeMessage;
+        plugin.getLogger().severe("Discord sync failed (" + reason + "): " + safeFailureMessage(exception));
+    }
+
+    private String safeFailureMessage(Exception exception) {
         if (exception instanceof SyncException) {
-            safeMessage = exception.getMessage();
-        } else if (exception instanceof IOException) {
-            safeMessage = "A local I/O operation failed.";
-        } else {
-            safeMessage = "An unexpected " + exception.getClass().getSimpleName() + " occurred.";
+            return exception.getMessage();
         }
-        plugin.getLogger().severe("Discord sync failed (" + reason + "): " + safeMessage);
+        if (exception instanceof IOException) {
+            return "A local I/O operation failed.";
+        }
+        return "An unexpected " + exception.getClass().getSimpleName() + " occurred.";
+    }
+
+    public record SyncStatus(
+            String state,
+            boolean configured,
+            boolean runtimeStateUsable,
+            long lastAttemptMillis,
+            long lastSuccessMillis,
+            String lastResult,
+            boolean queued,
+            boolean workerActive,
+            boolean retryScheduled,
+            int retryAttempt,
+            int trackedPages,
+            boolean createBlocked
+    ) {
+    }
+
+    public record WebhookTestResult(boolean success, String message) {
+    }
+
+    public enum ResetState {
+        SUCCESS,
+        BUSY,
+        STATE_UNAVAILABLE,
+        UNCONFIGURED,
+        STALE_CONFIGURATION
+    }
+
+    public record ResetResult(ResetState state, int clearedPages) {
     }
 
     private record CapturedSyncSnapshot(

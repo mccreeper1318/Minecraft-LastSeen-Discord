@@ -74,6 +74,10 @@ final class WebhookEndpoint {
         }
     }
 
+    URI testUri() {
+        return rebuild(baseUri.getPath(), null);
+    }
+
     URI executeUri() {
         List<String> queryParts = new ArrayList<>();
         String query = baseUri.getQuery();

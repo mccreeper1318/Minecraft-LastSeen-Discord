@@ -93,6 +93,40 @@ class DiscordWebhookClientHttpIntegrationTest {
     }
 
     @Test
+    void createAndEditExplicitlyDisableAllDiscordMentions() throws Exception {
+        script(200, "{\"id\":\"" + MESSAGE_ID + "\"}");
+        script(200, "{}");
+
+        String mentionText = "@everyone @here <@123456789012345678> <@&987654321098765432>";
+        client.create(endpoint, mentionText);
+        client.edit(endpoint, MESSAGE_ID, mentionText);
+
+        synchronized (capturedRequests) {
+            assertEquals(2, capturedRequests.size());
+            for (CapturedRequest request : capturedRequests) {
+                assertTrue(request.body().contains(
+                        "\"allowed_mentions\":{\"parse\":[]}"
+                ));
+                assertTrue(request.body().contains("@everyone"));
+                assertTrue(request.body().contains("@here"));
+            }
+        }
+    }
+
+    @Test
+    void webhookTestUsesNonMutatingGetWithoutThreadOrWaitQuery() throws Exception {
+        script(200, "{\"id\":\"" + WEBHOOK_ID + "\"}");
+
+        client.test(endpoint);
+
+        CapturedRequest request = onlyRequest();
+        assertEquals("GET", request.method());
+        assertEquals("/api/webhooks/" + WEBHOOK_ID + "/test_token", request.uri().getPath());
+        assertEquals(null, request.uri().getRawQuery());
+        assertEquals("", request.body());
+    }
+
+    @Test
     void editTreatsDiscordUnknownMessageResponseAsMissing() throws Exception {
         script(404, "{\"message\":\"Unknown Message\",\"code\":10008}");
 

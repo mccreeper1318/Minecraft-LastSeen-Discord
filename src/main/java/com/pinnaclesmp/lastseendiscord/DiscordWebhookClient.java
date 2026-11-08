@@ -75,6 +75,12 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
         }
     }
 
+    void test(WebhookEndpoint endpoint) throws IOException, InterruptedException {
+        HttpRequest request = baseRequest(endpoint.testUri()).GET().build();
+        HttpResponse<String> response = send(request, "test the Discord webhook", false);
+        ensureSuccess(response, "test the Discord webhook");
+    }
+
     void shutdown() {
         httpClient.shutdownNow();
     }
@@ -168,7 +174,8 @@ final class DiscordWebhookClient implements DiscordMessageSynchronizer.MessageCl
     }
 
     private String jsonBody(String content) {
-        return "{\"content\":\"" + escapeJson(content) + "\"}";
+        return "{\"content\":\"" + escapeJson(content)
+                + "\",\"allowed_mentions\":{\"parse\":[]}}";
     }
 
     private String escapeJson(String value) {

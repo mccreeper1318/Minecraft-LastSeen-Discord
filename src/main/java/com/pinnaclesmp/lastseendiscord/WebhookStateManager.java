@@ -131,6 +131,24 @@ final class WebhookStateManager {
         return true;
     }
 
+    synchronized int resetTrackedMessages(String expectedWebhookIdentity) throws IOException {
+        requireRunning();
+        if (createInProgress) {
+            throw new SyncException("A Discord message create request is still in progress.");
+        }
+        if (!Objects.equals(expectedWebhookIdentity, webhookIdentity)) {
+            throw new StaleConfigurationException();
+        }
+
+        int previousPageCount = messageIds.size();
+        stateStore.save(List.of(), false, webhookIdentity);
+        messageIds = List.of();
+        createOutcomeUnknown = false;
+        identityBindingRequired = false;
+        configurationGeneration++;
+        return previousPageCount;
+    }
+
     private synchronized boolean isCreateBlockedFor(long generation, String identity)
             throws StaleConfigurationException {
         requireCurrent(generation, identity);

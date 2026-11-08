@@ -20,15 +20,20 @@ LastSeenDiscord is a Paper plugin that maintains a Discord webhook message showi
 
 Treat the Discord webhook URL like a password. Anyone who has it can post through that webhook, so do not publish `config.yml` or paste an unredacted URL into logs or support messages.
 
-## Commands and permission
+## Commands and permissions
 
-| Command | Purpose |
-|---|---|
-| `/lsd sync` | Queue an immediate Discord update, bypassing the join/quit debounce window. |
-| `/lsd reload` | Reload and validate `config.yml`, restart the automatic schedule, and queue an update. |
-| `/lsd recover-create confirm` | Resume message creation after an ambiguous Discord response. Check the channel and remove any untracked duplicate page before confirming. |
+| Command | Permission | Purpose |
+|---|---|---|
+| `/lsd status` | `lastseendiscord.status` | Show sync state, last attempt/success, queue/retry state, and tracked page count without exposing webhook secrets. |
+| `/lsd test` | `lastseendiscord.test` | Perform a non-mutating GET check of the configured webhook. It does not create, edit, or delete messages. |
+| `/lsd sync` | `lastseendiscord.sync` | Queue an immediate Discord update, bypassing the join/quit debounce window. |
+| `/lsd reload` | `lastseendiscord.reload` | Reload and validate `config.yml`, restart the automatic schedule, and queue an update. |
+| `/lsd recover-create confirm` | `lastseendiscord.recover` | Resume message creation after an ambiguous Discord response. Check the channel and remove any untracked duplicate page before confirming. |
+| `/lsd reset messages confirm` | `lastseendiscord.reset` | Forget all tracked Discord page IDs after reconciling the old pages. This does not delete Discord messages or automatically sync. |
 
-Both commands require `lastseendiscord.admin`, which defaults to server operators. `/lastseendiscord` is the full command name.
+`lastseendiscord.admin` grants all LastSeenDiscord commands and defaults to server operators. Individual command permissions default to false and can be granted separately. `/lastseendiscord` is the full command name. The command includes permission-aware help and tab completion.
+
+The reset command is intentionally guarded. Before running it, reconcile or delete the old managed Discord pages; otherwise a later sync can create duplicate pages because the plugin no longer knows their IDs.
 
 ## Configuration
 
@@ -37,8 +42,14 @@ Both commands require `lastseendiscord.admin`, which defaults to server operator
 | `discord.webhook-url` | placeholder | Discord webhook used for the activity messages. Official HTTPS Discord webhook URLs are required. Invalid values disable synchronization until corrected. |
 | `discord.header` | `**Server Activity Status**` | Optional text placed above the list. |
 | `discord.include-last-seen-date` | `false` | Adds a `YYYY-MM-DD` activity date to each player. |
+| `discord.presentation.show-page-numbers` | `false` | Shows `Page X of Y` on every managed Discord page. |
+| `discord.presentation.repeat-header` | `false` | Repeats the configured header on continuation pages using a compact safe heading. |
+| `discord.presentation.show-summary` | `false` | Shows total, active, and inactive counts on every page after all player filters are applied. |
 | `activity.inactive-after-days` | `30` | Number of days without activity before a player is marked inactive. Values below `1` are normalized to `1`. |
 | `activity.timestamp-source` | `LAST_SEEN` | Uses `LAST_SEEN` or `LAST_LOGIN`, with the other timestamp as a compatibility fallback. Invalid values use `LAST_SEEN`. |
+| `activity.timezone` | `UTC` | IANA timezone used for activity dates in `DATE` mode, such as `America/New_York`. Invalid values fall back to UTC. |
+| `activity.date-format` | `uuuu-MM-dd` | Java `DateTimeFormatter` pattern used in `DATE` mode. Invalid, multiline, or oversized patterns fall back to the default. |
+| `activity.date-display` | `DATE` | `DATE` uses the configured timezone/format. `DISCORD` outputs a Discord-native `<t:epoch:F>` timestamp localized by each Discord client. |
 | `filters.whitelist-only` | `false` | When enabled, only players currently present in the Minecraft whitelist are included. |
 | `filters.excluded-uuids` | `[]` | UUIDs to exclude. UUID exclusions remain effective across Minecraft name changes. |
 | `filters.excluded-names` | `[]` | Player names to exclude, matched case-insensitively. UUID exclusions are preferred for long-term exclusions. |
@@ -53,6 +64,10 @@ Every supported setting is validated at startup and again by `/lsd reload`. Inva
 
 Player filters are composable. For example, `filters.whitelist-only: true` can be combined with UUID/name exclusions and `filters.activity: INACTIVE` to show only inactive whitelisted members after exclusions. Filtering is applied before Discord message pagination, so page creation/removal reflects only the final filtered player set. Existing installations keep the previous behavior because all filter defaults include every known player.
 
+Multi-page presentation options are also opt-in. Page numbers, repeated headings, and summary counts default to disabled so existing installations keep the previous message format. When summaries are enabled, their total/active/inactive counts are calculated after filtering and remain the same across all pages in that synchronization.
+
+Activity date rendering is deterministic when enabled. `activity.timezone` defaults to `UTC` instead of the server operating system timezone, and `activity.date-format` defaults to `uuuu-MM-dd`. Set an IANA zone such as `America/New_York` when you want fixed community-local rendering. `activity.date-display: DISCORD` ignores those two presentation settings and sends Discord's `<t:epoch:F>` syntax so each viewer sees the timestamp in their own Discord locale/timezone.
+
 The deprecated `discord.message-ids` and `discord.message-id` values are retained only to migrate installations upgrading from version 1.1.0 or earlier. Malformed or duplicate legacy IDs are ignored and reported during validation. Version 1.1.1 and later store generated message IDs in `message-state.json`; malformed or duplicate IDs in that runtime-state file cause synchronization to fail closed instead of entering active state. Do not edit `message-state.json` while the server is running.
 
 ## How synchronization behaves
@@ -62,6 +77,7 @@ The deprecated `discord.message-ids` and `discord.message-id` values are retaine
 - If the debounced activity request fires while a synchronization is already running, it is coalesced into the guaranteed follow-up pass rather than being lost.
 - `/lsd sync` is always immediate and bypasses the event debounce. It does not cancel a still-pending event debounce, so a later activity pass can still run if player activity was already waiting to be synchronized.
 - Discord requests run asynchronously and have finite connection and request timeouts.
+- Webhook create/edit payloads explicitly disable all Discord mentions, so configured headings or other rendered text cannot ping users, roles, `@everyone`, or `@here`.
 - Requests made during an active synchronization are coalesced into a guaranteed follow-up pass.
 - Discord rate limits, temporary network errors, and server errors retry with bounded exponential backoff.
 - A create request whose delivery cannot be determined is never retried automatically. The durable safety block prevents later scheduled updates and restarts from creating another page until an administrator resolves it.
